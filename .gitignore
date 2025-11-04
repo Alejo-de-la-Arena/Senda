@@ -1,0 +1,61 @@
+# ========================================
+# GENERAL
+# ========================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+
+# ========================================
+# ENVIRONMENT / CONFIG
+# ========================================
+.env
+.env.*         
+*.key
+*.pem
+
+# ========================================
+# BUILD / OUTPUT
+# ========================================
+.expo/
+.expo-shared/
+dist/
+build/
+coverage/
+.tmp/
+.cache/
+web-build/
+
+# ========================================
+# ANDROID / IOS
+# ========================================
+android/app/build/
+android/.gradle/
+android/.idea/
+android/local.properties
+android/.cxx/
+ios/build/
+ios/Pods/
+ios/.DS_Store
+ios/*.xcworkspace
+ios/*.xcodeproj/project.xcworkspace/
+ios/Podfile.lock
+
+# ========================================
+# SYSTEM / EDITOR FILES
+# ========================================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+
+# ========================================
+# SUPABASE / SERVER
+# ========================================
+server/node_modules/
+server/.env
+server/.cache/
+server/logs/
+server/tmp/

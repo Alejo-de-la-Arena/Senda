@@ -1,0 +1,14 @@
+// Este es un archivo placeholder para el ícono
+// Para generar el ícono real, puedes:
+// 1. Usar la versión SVG creada (icon.svg) y convertirla a PNG
+// 2. Crear tu propio diseño en Figma/Sketch
+// 3. Usar un generador online de íconos para apps
+
+// Requerimientos del ícono:
+// - Formato: PNG
+// - Tamaño recomendado: 1024x1024px
+// - Sin transparencia para mejor compatibilidad
+// - Diseño simple y reconocible
+
+// Por ahora, puedes usar cualquier imagen PNG de 1024x1024 
+// o generar una con el logo "S" de Senda
