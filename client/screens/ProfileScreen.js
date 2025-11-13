@@ -1,54 +1,96 @@
-import React, { useState } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  SafeAreaView, 
+import React, { useState, useEffect } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  SafeAreaView,
   ScrollView,
   TouchableOpacity,
   Image,
-  Modal
-} from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
-import { colors, typography, spacing, borderRadius, shadows } from '../styles/theme';
+  Modal,
+  ActivityIndicator,
+} from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import { Ionicons } from "@expo/vector-icons";
+import {
+  colors,
+  typography,
+  spacing,
+  borderRadius,
+  shadows,
+} from "../styles/theme";
+import { useNavigation } from "@react-navigation/native";
+import { useAuth } from "../auth/AuthProvider";
+import { getMe } from "../api/user";
 
 const ProfileScreen = () => {
   const [showSettings, setShowSettings] = useState(false);
+  const navigation = useNavigation();
+  const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const { logout } = useAuth();
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const me = await getMe();
+        setProfile(me);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
 
   const userData = {
-    name: 'Felipe Ledesma',
-    username: '@Ledesma47',
-    country: 'Argentina',
+    name: "Felipe Ledesma",
+    username: "@Ledesma47",
+    country: "Argentina",
     followers: 47,
     following: 23,
-    joinDate: 'Enero 2024',
+    joinDate: "Enero 2024",
     completedRituals: 156,
     currentStreak: 12,
-    totalHours: 48
+    totalHours: 48,
+  };
+
+  const handlePress = async (option) => {
+    if (option.id === 8) {
+      logout();
+    } else {
+      // cualquier otra acción
+      console.log("Opción seleccionada:", option);
+    }
   };
 
   const settingsOptions = [
-    { id: 1, title: 'Ajustes', icon: 'settings-outline' },
-    { id: 2, title: 'Info de la cuenta', icon: 'information-circle-outline' },
-    { id: 3, title: 'Membresía', icon: 'card-outline' },
-    { id: 4, title: 'Preferencias', icon: 'options-outline' },
-    { id: 5, title: 'Conexiones', icon: 'link-outline' },
-    { id: 6, title: 'Notificaciones', icon: 'notifications-outline' },
-    { id: 7, title: 'Permisos', icon: 'shield-checkmark-outline' },
-    { id: 8, title: 'Cerrar sesión', icon: 'log-out-outline', isLogout: true }
+    { id: 1, title: "Ajustes", icon: "settings-outline" },
+    { id: 2, title: "Info de la cuenta", icon: "information-circle-outline" },
+    { id: 3, title: "Membresía", icon: "card-outline" },
+    { id: 4, title: "Preferencias", icon: "options-outline" },
+    { id: 5, title: "Conexiones", icon: "link-outline" },
+    { id: 6, title: "Notificaciones", icon: "notifications-outline" },
+    { id: 7, title: "Permisos", icon: "shield-checkmark-outline" },
+    { id: 8, title: "Cerrar sesión", icon: "log-out-outline", isLogout: true },
   ];
 
   const formatNumber = (num) => {
     if (num >= 1000) {
-      return (num / 1000).toFixed(1) + 'k';
+      return (num / 1000).toFixed(1) + "k";
     }
     return num.toString();
   };
 
+  
+  if (loading) return <ActivityIndicator style={{ flex: 1 }} />;
+  if (!profile) return <Text>Sin sesión</Text>;
+
   return (
     <LinearGradient
-      colors={[colors.azulProfundo, colors.fondoBaseOscuro, colors.marronTierra]}
+      colors={[
+        colors.azulProfundo,
+        colors.fondoBaseOscuro,
+        colors.marronTierra,
+      ]}
       style={styles.container}
       locations={[0, 0.5, 1]}
     >
@@ -56,15 +98,19 @@ const ProfileScreen = () => {
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Perfil</Text>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.menuButton}
             onPress={() => setShowSettings(true)}
           >
-            <Ionicons name="ellipsis-horizontal" size={24} color="rgba(255,255,255,0.96)" />
+            <Ionicons
+              name="ellipsis-horizontal"
+              size={24}
+              color="rgba(255,255,255,0.96)"
+            />
           </TouchableOpacity>
         </View>
 
-        <ScrollView 
+        <ScrollView
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.scrollContent}
         >
@@ -73,7 +119,11 @@ const ProfileScreen = () => {
             {/* Avatar */}
             <View style={styles.avatarContainer}>
               <View style={styles.avatar}>
-                <Ionicons name="person" size={50} color="rgba(255,255,255,0.6)" />
+                <Ionicons
+                  name="person"
+                  size={50}
+                  color="rgba(255,255,255,0.6)"
+                />
               </View>
               <TouchableOpacity style={styles.editAvatarButton}>
                 <Ionicons name="camera" size={16} color="#0C0A0A" />
@@ -81,22 +131,30 @@ const ProfileScreen = () => {
             </View>
 
             {/* User Info */}
-            <Text style={styles.name}>{userData.name}</Text>
-            <Text style={styles.username}>{userData.username}</Text>
+            <Text style={styles.name}>{profile?.name}</Text>
+            <Text style={styles.username}>{profile?.email}</Text>
             <View style={styles.locationContainer}>
-              <Ionicons name="location-outline" size={14} color="rgba(255,255,255,0.5)" />
-              <Text style={styles.location}>{userData.country}</Text>
+              <Ionicons
+                name="body"
+                size={14}
+                color="rgba(255,255,255,0.5)"
+              />
+              <Text style={styles.location}>{profile?.primary_goal}</Text>
             </View>
 
             {/* Follow Stats */}
             <View style={styles.statsRow}>
               <TouchableOpacity style={styles.statItem}>
-                <Text style={styles.statNumber}>{formatNumber(userData.followers)}</Text>
+                <Text style={styles.statNumber}>
+                  {formatNumber(userData.followers)}
+                </Text>
                 <Text style={styles.statLabel}>Seguidores</Text>
               </TouchableOpacity>
               <View style={styles.statDivider} />
               <TouchableOpacity style={styles.statItem}>
-                <Text style={styles.statNumber}>{formatNumber(userData.following)}</Text>
+                <Text style={styles.statNumber}>
+                  {formatNumber(userData.following)}
+                </Text>
                 <Text style={styles.statLabel}>Siguiendo</Text>
               </TouchableOpacity>
             </View>
@@ -107,7 +165,11 @@ const ProfileScreen = () => {
                 <Text style={styles.editProfileText}>Editar perfil</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.shareButton}>
-                <Ionicons name="share-outline" size={20} color="rgba(255,255,255,0.96)" />
+                <Ionicons
+                  name="share-outline"
+                  size={20}
+                  color="rgba(255,255,255,0.96)"
+                />
               </TouchableOpacity>
             </View>
           </View>
@@ -118,12 +180,16 @@ const ProfileScreen = () => {
             <View style={styles.activityGrid}>
               <View style={styles.activityCard}>
                 <Ionicons name="flame-outline" size={24} color="#FF6B6B" />
-                <Text style={styles.activityValue}>{userData.currentStreak}</Text>
+                <Text style={styles.activityValue}>
+                  {userData.currentStreak}
+                </Text>
                 <Text style={styles.activityLabel}>Días seguidos</Text>
               </View>
               <View style={styles.activityCard}>
                 <Ionicons name="trophy-outline" size={24} color="#FFB347" />
-                <Text style={styles.activityValue}>{userData.completedRituals}</Text>
+                <Text style={styles.activityValue}>
+                  {userData.completedRituals}
+                </Text>
                 <Text style={styles.activityLabel}>Rituales</Text>
               </View>
               <View style={styles.activityCard}>
@@ -143,7 +209,9 @@ const ProfileScreen = () => {
                   <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
                 </View>
                 <View style={styles.recentInfo}>
-                  <Text style={styles.recentText}>Completaste MORNING FLOW</Text>
+                  <Text style={styles.recentText}>
+                    Completaste MORNING FLOW
+                  </Text>
                   <Text style={styles.recentTime}>Hace 2 horas</Text>
                 </View>
               </View>
@@ -161,7 +229,9 @@ const ProfileScreen = () => {
                   <Ionicons name="people" size={20} color="#FFB347" />
                 </View>
                 <View style={styles.recentInfo}>
-                  <Text style={styles.recentText}>Te uniste a "Morning Warriors"</Text>
+                  <Text style={styles.recentText}>
+                    Te uniste a "Morning Warriors"
+                  </Text>
                   <Text style={styles.recentTime}>Ayer</Text>
                 </View>
               </View>
@@ -178,7 +248,7 @@ const ProfileScreen = () => {
           transparent={true}
           onRequestClose={() => setShowSettings(false)}
         >
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.modalOverlay}
             activeOpacity={1}
             onPress={() => setShowSettings(false)}
@@ -187,35 +257,44 @@ const ProfileScreen = () => {
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>Configuración</Text>
                 <TouchableOpacity onPress={() => setShowSettings(false)}>
-                  <Ionicons name="close" size={24} color="rgba(255,255,255,0.96)" />
+                  <Ionicons
+                    name="close"
+                    size={24}
+                    color="rgba(255,255,255,0.96)"
+                  />
                 </TouchableOpacity>
               </View>
-              
+
               <ScrollView showsVerticalScrollIndicator={false}>
                 {settingsOptions.map((option) => (
-                  <TouchableOpacity 
-                    key={option.id} 
+                  <TouchableOpacity
+                    key={option.id}
                     style={[
                       styles.settingOption,
-                      option.isLogout && styles.logoutOption
+                      option.isLogout && styles.logoutOption,
                     ]}
+                    onPress={() => handlePress(option)}
                   >
-                    <Ionicons 
-                      name={option.icon} 
-                      size={22} 
-                      color={option.isLogout ? "#FF6B6B" : "rgba(255,255,255,0.7)"} 
+                    <Ionicons
+                      name={option.icon}
+                      size={22}
+                      color={
+                        option.isLogout ? "#FF6B6B" : "rgba(255,255,255,0.7)"
+                      }
                     />
-                    <Text style={[
-                      styles.settingText,
-                      option.isLogout && styles.logoutText
-                    ]}>
+                    <Text
+                      style={[
+                        styles.settingText,
+                        option.isLogout && styles.logoutText,
+                      ]}
+                    >
                       {option.title}
                     </Text>
                     {!option.isLogout && (
-                      <Ionicons 
-                        name="chevron-forward" 
-                        size={20} 
-                        color="rgba(255,255,255,0.3)" 
+                      <Ionicons
+                        name="chevron-forward"
+                        size={20}
+                        color="rgba(255,255,255,0.3)"
                       />
                     )}
                   </TouchableOpacity>
@@ -237,9 +316,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingHorizontal: 20,
     paddingVertical: 20,
   },
@@ -255,83 +334,83 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   profileSection: {
-    alignItems: 'center',
+    alignItems: "center",
     paddingVertical: 20,
   },
   avatarContainer: {
-    position: 'relative',
+    position: "relative",
     marginBottom: 16,
   },
   avatar: {
     width: 100,
     height: 100,
     borderRadius: 50,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(255,255,255,0.08)",
+    justifyContent: "center",
+    alignItems: "center",
     borderWidth: 3,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: "rgba(255,255,255,0.1)",
   },
   editAvatarButton: {
-    position: 'absolute',
+    position: "absolute",
     bottom: 0,
     right: 0,
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.96)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(255,255,255,0.96)",
+    justifyContent: "center",
+    alignItems: "center",
   },
   name: {
     fontSize: 24,
-    fontWeight: '700',
-    color: 'rgba(255,255,255,0.96)',
+    fontWeight: "700",
+    color: "rgba(255,255,255,0.96)",
     marginBottom: 4,
   },
   username: {
     fontSize: 16,
-    color: 'rgba(255,255,255,0.6)',
+    color: "rgba(255,255,255,0.6)",
     marginBottom: 8,
   },
   locationContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 4,
     marginBottom: 24,
   },
   location: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.5)',
+    color: "rgba(255,255,255,0.5)",
   },
   statsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 24,
   },
   statItem: {
-    alignItems: 'center',
+    alignItems: "center",
     paddingHorizontal: 32,
   },
   statNumber: {
     fontSize: 22,
-    fontWeight: '700',
-    color: 'rgba(255,255,255,0.96)',
+    fontWeight: "700",
+    color: "rgba(255,255,255,0.96)",
     marginBottom: 4,
   },
   statLabel: {
     fontSize: 13,
-    color: 'rgba(255,255,255,0.5)',
+    color: "rgba(255,255,255,0.5)",
   },
   statDivider: {
     width: 1,
     height: 40,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: "rgba(255,255,255,0.08)",
   },
   actionButtons: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 12,
-    width: '100%',
+    width: "100%",
     paddingHorizontal: 20,
   },
   editProfileButton: {
@@ -339,7 +418,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.azulNaturaleza,
     paddingVertical: spacing.sm,
     borderRadius: borderRadius.round,
-    alignItems: 'center',
+    alignItems: "center",
   },
   editProfileText: {
     fontSize: typography.sizes.body,
@@ -349,12 +428,12 @@ const styles = StyleSheet.create({
   shareButton: {
     width: 44,
     height: 44,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: "rgba(255,255,255,0.08)",
     borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
+    borderColor: "rgba(255,255,255,0.15)",
   },
   activitySection: {
     marginTop: 32,
@@ -362,12 +441,12 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: '700',
-    color: 'rgba(255,255,255,0.96)',
+    fontWeight: "700",
+    color: "rgba(255,255,255,0.96)",
     marginBottom: 16,
   },
   activityGrid: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 12,
   },
   activityCard: {
@@ -375,7 +454,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.beigeNatural,
     borderRadius: borderRadius.lg,
     padding: spacing.md,
-    alignItems: 'center',
+    alignItems: "center",
     ...shadows.sm,
   },
   activityValue: {
@@ -389,7 +468,7 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.caption,
     color: colors.fondoBaseOscuro,
     opacity: 0.7,
-    textAlign: 'center',
+    textAlign: "center",
   },
   recentSection: {
     marginBottom: 32,
@@ -398,39 +477,39 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   recentItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 12,
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    backgroundColor: "rgba(255,255,255,0.04)",
     padding: 16,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: "rgba(255,255,255,0.08)",
   },
   recentIcon: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    backgroundColor: "rgba(255,255,255,0.08)",
+    justifyContent: "center",
+    alignItems: "center",
   },
   recentInfo: {
     flex: 1,
   },
   recentText: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.9)',
+    color: "rgba(255,255,255,0.9)",
     marginBottom: 2,
   },
   recentTime: {
     fontSize: 12,
-    color: 'rgba(255,255,255,0.4)',
+    color: "rgba(255,255,255,0.4)",
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    justifyContent: 'flex-end',
+    backgroundColor: "rgba(0,0,0,0.7)",
+    justifyContent: "flex-end",
   },
   modalContent: {
     backgroundColor: colors.fondoBaseOscuro,
@@ -438,25 +517,25 @@ const styles = StyleSheet.create({
     borderTopRightRadius: borderRadius.xl,
     paddingTop: spacing.lg,
     paddingBottom: 40,
-    maxHeight: '80%',
+    maxHeight: "80%",
     borderTopWidth: 1,
-    borderTopColor: colors.azulNaturaleza + '33',
+    borderTopColor: colors.azulNaturaleza + "33",
   },
   modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     paddingHorizontal: 24,
     marginBottom: 24,
   },
   modalTitle: {
     fontSize: 20,
-    fontWeight: '700',
-    color: 'rgba(255,255,255,0.96)',
+    fontWeight: "700",
+    color: "rgba(255,255,255,0.96)",
   },
   settingOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     paddingVertical: 16,
     paddingHorizontal: 24,
     gap: 16,
@@ -465,15 +544,15 @@ const styles = StyleSheet.create({
     marginTop: 16,
     paddingTop: 24,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.08)',
+    borderTopColor: "rgba(255,255,255,0.08)",
   },
   settingText: {
     flex: 1,
     fontSize: 16,
-    color: 'rgba(255,255,255,0.9)',
+    color: "rgba(255,255,255,0.9)",
   },
   logoutText: {
-    color: '#FF6B6B',
+    color: "#FF6B6B",
   },
 });
 

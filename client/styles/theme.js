@@ -15,8 +15,8 @@ export const colors = {
   // Aliases para facilitar el uso
   background: '#1F2E24',
   primary: '#355E3B',
-  secondary: '#4B3621',
-  accent: '#D98C5F',
+  secondary: '#4B3621', 
+  accent: '#fdbf9bff',
   surface: '#EAE6DA',
   blue: '#3B5E5C', // Alias para el azul principal
   blueLight: '#5A8A87',

@@ -98,8 +98,8 @@ export const commonStyles = StyleSheet.create({
   },
   buttonSecondaryText: {
     fontSize: typography.sizes.body,
-    fontWeight: typography.weights.semiBold,
-    color: colors.textoPrincipal,
+    fontWeight: typography.weights.regular,
+    color: colors.accent,
   },
   buttonOutline: {
     borderWidth: 1,
