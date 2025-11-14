@@ -21,7 +21,7 @@ r.get("/ping", async (_req, res) => {
             input: [{ role: "user", content: "Di OK en una palabra." }],
         });
         const text = out?.output?.[0]?.content?.[0]?.text ?? "OK";
-        res.json({ ok: true, model: "gpt-4.1-mini", reply: text.trim() });
+        res.json({ ok: true, model: "gpt-5", reply: text.trim() });
     } catch (e) {
         console.error("[ai/ping]", e?.status || "", e?.message);
         res
@@ -101,7 +101,7 @@ r.post("/nutrition/recommend", async (req, res) => {
         };
 
         const resp = await openai.responses.create({
-            model: "gpt-4.1-mini",
+            model: "gpt-5",
             input: [
                 {
                     role: "system",
@@ -153,7 +153,7 @@ r.post("/workouts/validate", async (req, res) => {
         };
 
         const resp = await openai.responses.create({
-            model: "gpt-4.1-mini",
+            model: "gpt-5",
             input: [
                 {
                     role: "system",
@@ -203,7 +203,7 @@ r.post("/mood/breathing", async (req, res) => {
         };
 
         const resp = await openai.responses.create({
-            model: "gpt-4.1-mini",
+            model: "gpt-5",
             input: [
                 {
                     role: "system",
@@ -256,7 +256,7 @@ r.post("/meditation", async (req, res) => {
 
 
         const resp = await openai.responses.create({
-            model: "gpt-4.1-mini",
+            model: "gpt-5",
             input: [
                 {
                     role: "system",

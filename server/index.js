@@ -24,7 +24,6 @@ app.use('/', require('./routes/program'));
 app.use('/', require('./routes/assignment'));
 app.use('/', require('./routes/logs'));
 
-// NUEVO: rutas de OpenAI
 app.use('/ai', require('./routes/ai'));
 
 app.get('/health', (_req, res) => res.json({ ok: true, ts: Date.now() }));
