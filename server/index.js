@@ -1,3 +1,4 @@
+// index.js (tu archivo original)
 const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
@@ -12,16 +13,18 @@ app.use(cookieParser());
 app.use(morgan('dev'));
 app.use(authOptional);
 
-// Rutas
+// Rutas existentes
 app.use('/users', require('./routes/users'));
 app.use('/me', require('./routes/me'));
 app.use('/meditation', require('./routes/meditation'));
-app.use('/users', require('./routes/nutrition'));  
-app.use('/users', require('./routes/diet'));       
-app.use('/', require('./routes/trainers'));        
-app.use('/', require('./routes/program'));  
-app.use('/', require('./routes/assignment'));      
-app.use('/', require('./routes/logs'));            
+app.use('/users', require('./routes/nutrition'));
+app.use('/users', require('./routes/diet'));
+app.use('/', require('./routes/trainers'));
+app.use('/', require('./routes/program'));
+app.use('/', require('./routes/assignment'));
+app.use('/', require('./routes/logs'));
+
+app.use('/ai', require('./routes/ai'));
 
 app.get('/health', (_req, res) => res.json({ ok: true, ts: Date.now() }));
 
