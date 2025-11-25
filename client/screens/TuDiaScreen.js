@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  View, 
-  Text, 
-  ScrollView, 
-  StyleSheet, 
+import {
+  View,
+  Text,
+  ScrollView,
+  StyleSheet,
   SafeAreaView,
   Animated,
   Dimensions,
@@ -20,13 +20,14 @@ import SupplementsModal from '../components/SupplementsModal';
 
 const { height } = Dimensions.get('window');
 
-const TuDiaScreen = ({ navigation }) => {
+const TuDiaScreen = ({ navigation, route }) => {
   const [selectedRitual, setSelectedRitual] = useState('breathe');
   const [viewMode, setViewMode] = useState('today'); // 'today' o 'week'
+  const [breathingStatus, setBreathingStatus] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
   const fadeAnim = React.useRef(new Animated.Value(0)).current;
   const slideAnim = React.useRef(new Animated.Value(30)).current;
-  
+
   // Estado para suplementos
   const [supplements, setSupplements] = useState([
     { id: 1, name: 'espirulina', taken: false, time: 'Mañana', dose: '2 pastillas' },
@@ -34,7 +35,7 @@ const TuDiaScreen = ({ navigation }) => {
     { id: 3, name: 'Magnesio', taken: false, time: 'Noche', dose: '1 pastilla' },
     { id: 4, name: 'Mejunge', taken: false, time: 'Tarde', dose: '1' },
   ]);
-  
+
   const toggleSupplement = (id) => {
     // Vibración deshabilitada para Expo Snack
     // Uncomment if using on physical device:
@@ -42,8 +43,8 @@ const TuDiaScreen = ({ navigation }) => {
     //   const Haptics = require('expo-haptics');
     //   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     // }
-    
-    setSupplements(supplements.map(supp => 
+
+    setSupplements(supplements.map(supp =>
       supp.id === id ? { ...supp, taken: !supp.taken } : supp
     ));
   };
@@ -185,6 +186,14 @@ const TuDiaScreen = ({ navigation }) => {
   const todayPlan = weekPlan[todayKey] || weekPlan.monday; // Fallback a monday para testing
 
   useEffect(() => {
+    if (route?.params?.breathingStatus) {
+      setBreathingStatus(route.params.breathingStatus);
+      navigation.setParams({ breathingStatus: undefined });
+    }
+  }, [route?.params?.breathingStatus]);
+
+
+  useEffect(() => {
     // Animación de entrada
     Animated.parallel([
       Animated.timing(fadeAnim, {
@@ -205,9 +214,9 @@ const TuDiaScreen = ({ navigation }) => {
       {/* Tipo de día */}
       <View style={styles.dayTypeCard}>
         <View style={[styles.dayTypeIcon, { backgroundColor: todayPlan.dayTypeColor + '20' }]}>
-          <Ionicons 
-            name={todayPlan.dayTypeIcon} 
-            size={24} 
+          <Ionicons
+            name={todayPlan.dayTypeIcon}
+            size={24}
             color={todayPlan.dayTypeColor}
           />
         </View>
@@ -246,7 +255,7 @@ const TuDiaScreen = ({ navigation }) => {
       )}
 
       {/* Ritual Switcher con contenido del día */}
-      <PillSwitcher 
+      <PillSwitcher
         selected={selectedRitual}
         onSelect={setSelectedRitual}
       />
@@ -255,27 +264,39 @@ const TuDiaScreen = ({ navigation }) => {
       {selectedRitual === 'breathe' && todayPlan.breathing && (
         <View style={styles.plannedCard}>
           <View style={styles.plannedHeader}>
-            <Text style={styles.plannedTitle}>Respiración Programada</Text>
-            <View style={[styles.statusBadge, todayPlan.breathing.completed && styles.completedBadge]}>
+            <Text style={styles.plannedTitle}>Breathe de hoy</Text>
+            <View
+              style={[
+                styles.statusBadge,
+                breathingStatus === 'completed' && styles.completedBadge,
+              ]}
+            >
               <Text style={styles.statusText}>
-                {todayPlan.breathing.completed ? 'Completado' : todayPlan.breathing.time}
+                {breathingStatus === 'completed'
+                  ? 'Completado'
+                  : breathingStatus === 'incomplete'
+                    ? 'No realizada del todo'
+                    : 'Pendiente'}
               </Text>
             </View>
           </View>
           <View style={styles.plannedContent}>
-            <Text style={styles.plannedName}>{todayPlan.breathing.name}</Text>
-            <Text style={styles.plannedDuration}>{todayPlan.breathing.duration}</Text>
+            <Text style={styles.plannedName}>Sesión personalizada de respiración</Text>
+            <Text style={styles.plannedDuration}>
+              Generada según tu estado de ánimo de hoy
+            </Text>
           </View>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.startButton}
-            onPress={() => navigation.navigate('BoxBreathing')}
+            onPress={() => navigation.navigate('BreatheSetup')}
           >
             <Text style={styles.startButtonText}>
-              {todayPlan.breathing.completed ? 'Repetir' : 'Iniciar'}
+              {breathingStatus === 'completed' ? 'Repetir' : 'Iniciar'}
             </Text>
           </TouchableOpacity>
         </View>
       )}
+
 
       {selectedRitual === 'train' && todayPlan.workout && (
         <View style={styles.plannedCard}>
@@ -359,7 +380,7 @@ const TuDiaScreen = ({ navigation }) => {
         </View>
         <View style={styles.supplementsList}>
           {supplements.map((supplement) => (
-            <TouchableOpacity 
+            <TouchableOpacity
               key={supplement.id}
               style={styles.supplementItem}
               onPress={() => toggleSupplement(supplement.id)}
@@ -386,7 +407,7 @@ const TuDiaScreen = ({ navigation }) => {
             </TouchableOpacity>
           ))}
         </View>
-        <TouchableOpacity 
+        <TouchableOpacity
           style={styles.addSupplementButton}
           onPress={() => setModalVisible(true)}
         >
@@ -417,7 +438,7 @@ const TuDiaScreen = ({ navigation }) => {
 
   const renderWeekView = () => (
     <View style={styles.weekViewContainer}>
-      <TouchableOpacity 
+      <TouchableOpacity
         style={styles.backToTodayButton}
         onPress={() => setViewMode('today')}
       >
@@ -426,11 +447,11 @@ const TuDiaScreen = ({ navigation }) => {
       </TouchableOpacity>
 
       <Text style={styles.weekViewTitle}>Plan Semanal</Text>
-      
+
       <ScrollView showsVerticalScrollIndicator={false}>
         {Object.entries(weekPlan).map(([day, plan]) => (
-          <TouchableOpacity 
-            key={day} 
+          <TouchableOpacity
+            key={day}
             style={[
               styles.weekDayCard,
               day === todayKey && styles.todayWeekCard
@@ -490,11 +511,11 @@ const TuDiaScreen = ({ navigation }) => {
       locations={[0, 0.5, 1]}
     >
       <SafeAreaView style={styles.safeArea}>
-        <ScrollView 
+        <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          <Animated.View 
+          <Animated.View
             style={[
               styles.content,
               {
@@ -510,7 +531,7 @@ const TuDiaScreen = ({ navigation }) => {
           </Animated.View>
         </ScrollView>
       </SafeAreaView>
-      
+
       {/* Supplements Modal */}
       <SupplementsModal
         visible={modalVisible}
