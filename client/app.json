@@ -4,6 +4,7 @@
     "slug": "senda",
     "version": "1.0.0",
     "orientation": "portrait",
+    "jsEngine": "hermes",
     "userInterfaceStyle": "dark",
     "splash": {
       "image": "./assets/splash.png",
@@ -14,7 +15,8 @@
       "**/*"
     ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "jsEngine": "jsc"
     },
     "android": {
       "adaptiveIcon": {

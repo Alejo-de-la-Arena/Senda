@@ -5,7 +5,7 @@ import TabNavigator from "./TabNavigator";
 import BoxBreathingScreen from "../screens/BoxBreathingScreen";
 import SendaAIChatScreen from "../screens/SendaAIChatScreen";
 import LoginScreen from "../screens/LoginScreen";
-import RegisterScreen from "../screens/RegisterScreen";
+import RegisterScreen from "../screens/registers/RegisterScreen";
 import { colors } from "../styles/theme";
 import { useAuth } from "../auth/AuthProvider";
 

@@ -37,4 +37,17 @@ function requireAuth(req, res, next) {
     next();
 }
 
-module.exports = { authOptional, requireAuth };
+function authRequired(req, res, next) {
+  // authOptional debería haberte puesto req.user si la sesión es válida
+  if (!req.user) {
+    return res.status(401).json({ error: 'Autenticación requerida' });
+  }
+  next();
+}
+
+module.exports = {
+  authOptional,
+  authRequired,
+};
+
+module.exports = { authOptional, requireAuth, authRequired };
