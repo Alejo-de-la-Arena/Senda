@@ -228,7 +228,7 @@ router.patch(
       phone: z.string().optional(),
       name: z.string().min(1).optional(),
       surname: z.string().optional(),
-      // agregá los que quieras permitir
+      avatar_url: z.string().url().optional(), // 👈 NUEVO
     })
   ),
   async (req, res) => {

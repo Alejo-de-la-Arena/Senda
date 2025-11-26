@@ -21,13 +21,16 @@ import {
 } from "../styles/theme";
 import { useNavigation } from "@react-navigation/native";
 import { useAuth } from "../auth/AuthProvider";
-import { getMe } from "../api/user";
+import { getMe, updateMe } from "../api/user";
+import * as ImagePicker from "expo-image-picker";
+import { supabase } from "../supabaseClient";
 
 const ProfileScreen = () => {
   const [showSettings, setShowSettings] = useState(false);
   const navigation = useNavigation();
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const { logout } = useAuth();
 
   useEffect(() => {
@@ -73,6 +76,71 @@ const ProfileScreen = () => {
     { id: 8, title: "Cerrar sesión", icon: "log-out-outline", isLogout: true },
   ];
 
+  const handleChangeAvatar = async () => {
+    try {
+      setUploadingAvatar(true);
+
+      // 1) Elegir imagen
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (result.canceled) return;
+
+      const asset = result.assets[0];
+      const uri = asset.uri;
+      if (!uri) return;
+
+      // 2) Traer los bytes de la imagen
+      const resp = await fetch(uri);
+      const arrayBuffer = await resp.arrayBuffer();
+      const fileBytes = new Uint8Array(arrayBuffer); // <- esto va a Supabase
+
+      // 3) Nombre de archivo
+      const extFromUri = uri.split(".").pop()?.toLowerCase().split("?")[0];
+      const fileExt = extFromUri || "jpg";
+      const fileName = `user-${profile.id}-${Date.now()}.${fileExt}`;
+
+      // 4) Subir a bucket "avatars" usando bytes
+      const { error: uploadError } = await supabase.storage
+        .from("avatars")
+        .upload(fileName, fileBytes, {
+          upsert: true,
+          contentType: asset.mimeType || "image/jpeg",
+          cacheControl: "3600",
+        });
+
+      if (uploadError) {
+        console.log("[avatar] upload error", uploadError);
+        throw new Error("No pudimos subir tu foto. Probá de nuevo.");
+      }
+
+      // 5) Obtener URL pública
+      const { data } = supabase.storage.from("avatars").getPublicUrl(fileName);
+      const publicUrl = data.publicUrl;
+
+      // 6) Guardar en tu backend
+      await updateMe({ avatar_url: publicUrl });
+
+      // 7) Refrescar estado local
+      setProfile((prev) => ({
+        ...prev,
+        avatar_url: publicUrl,
+      }));
+    } catch (err) {
+      console.log("[avatar] ERROR:", err);
+      Alert.alert(
+        "Ups...",
+        err?.message || "No pudimos actualizar tu foto de perfil."
+      );
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
   const formatNumber = (num) => {
     if (num >= 1000) {
       return (num / 1000).toFixed(1) + "k";
@@ -80,7 +148,6 @@ const ProfileScreen = () => {
     return num.toString();
   };
 
-  
   if (loading) return <ActivityIndicator style={{ flex: 1 }} />;
   if (!profile) return <Text>Sin sesión</Text>;
 
@@ -119,13 +186,31 @@ const ProfileScreen = () => {
             {/* Avatar */}
             <View style={styles.avatarContainer}>
               <View style={styles.avatar}>
-                <Ionicons
-                  name="person"
-                  size={50}
-                  color="rgba(255,255,255,0.6)"
-                />
+                {profile?.avatar_url ? (
+                  <Image
+                    source={{ uri: profile.avatar_url }}
+                    style={styles.avatarImage}
+                  />
+                ) : (
+                  <Ionicons
+                    name="person"
+                    size={50}
+                    color="rgba(255,255,255,0.6)"
+                  />
+                )}
+
+                {uploadingAvatar && (
+                  <View style={styles.avatarOverlay}>
+                    <ActivityIndicator color="#fff" />
+                  </View>
+                )}
               </View>
-              <TouchableOpacity style={styles.editAvatarButton}>
+
+              <TouchableOpacity
+                style={styles.editAvatarButton}
+                onPress={handleChangeAvatar}
+                disabled={uploadingAvatar}
+              >
                 <Ionicons name="camera" size={16} color="#0C0A0A" />
               </TouchableOpacity>
             </View>
@@ -134,11 +219,7 @@ const ProfileScreen = () => {
             <Text style={styles.name}>{profile?.name}</Text>
             <Text style={styles.username}>{profile?.email}</Text>
             <View style={styles.locationContainer}>
-              <Ionicons
-                name="body"
-                size={14}
-                color="rgba(255,255,255,0.5)"
-              />
+              <Ionicons name="body" size={14} color="rgba(255,255,255,0.5)" />
               <Text style={styles.location}>{profile?.primary_goal}</Text>
             </View>
 
@@ -361,6 +442,11 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.96)",
     justifyContent: "center",
     alignItems: "center",
+  },
+  avatarImage: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 50,
   },
   name: {
     fontSize: 24,
