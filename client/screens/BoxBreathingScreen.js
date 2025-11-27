@@ -1,3 +1,4 @@
+// screens/BoxBreathingScreen.js
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
@@ -7,137 +8,158 @@ import {
   TouchableOpacity,
   Animated,
   Dimensions,
-  Vibration
+  Vibration,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, typography, spacing, borderRadius, shadows } from '../styles/theme';
 
-const { width, height } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
 
-const BoxBreathingScreen = ({ navigation }) => {
+const BoxBreathingScreen = ({ navigation, route }) => {
+  const routine = route?.params?.routine;
+
+  const phaseConfig = {
+    inhale: {
+      text: routine?.phases?.inhale?.label ?? 'Inhala',
+      duration: routine?.phases?.inhale?.duration ?? 4,
+      color: colors.verdeBosque,
+      icon: 'arrow-up',
+      instruction:
+        routine?.phases?.inhale?.instruction ?? 'Respira profundamente por la nariz',
+    },
+    hold1: {
+      text: routine?.phases?.hold1?.label ?? 'Mantén',
+      duration: routine?.phases?.hold1?.duration ?? 4,
+      color: colors.naranjaCTA,
+      icon: 'pause',
+      instruction: routine?.phases?.hold1?.instruction ?? 'Retén el aire en tus pulmones',
+    },
+    exhale: {
+      text: routine?.phases?.exhale?.label ?? 'Exhala',
+      duration: routine?.phases?.exhale?.duration ?? 4,
+      color: colors.marronTierra,
+      icon: 'arrow-down',
+      instruction:
+        routine?.phases?.exhale?.instruction ?? 'Suelta el aire lentamente por la boca',
+    },
+    hold2: {
+      text: routine?.phases?.hold2?.label ?? 'Mantén',
+      duration: routine?.phases?.hold2?.duration ?? 4,
+      color: colors.verdeBosque,
+      icon: 'pause',
+      instruction: routine?.phases?.hold2?.instruction ?? 'Mantén los pulmones vacíos',
+    },
+  };
+
   const [isActive, setIsActive] = useState(false);
   const [phase, setPhase] = useState('inhale'); // inhale, hold1, exhale, hold2
-  const [secondsRemaining, setSecondsRemaining] = useState(4);
-  const [totalCycles, setTotalCycles] = useState(0);
+  const [secondsRemaining, setSecondsRemaining] = useState(
+    phaseConfig.inhale.duration
+  );
+  const [totalCycles, setTotalCycles] = useState(routine?.cycles ?? 6);
   const [currentCycle, setCurrentCycle] = useState(0);
-  
+
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const opacityAnim = useRef(new Animated.Value(0.3)).current;
   const rotateAnim = useRef(new Animated.Value(0)).current;
 
-  const phaseConfig = {
-    inhale: { 
-      text: 'Inhala', 
-      duration: 4, 
-      color: colors.verdeBosque,
-      icon: 'arrow-up',
-      instruction: 'Respira profundamente por la nariz'
-    },
-    hold1: { 
-      text: 'Mantén', 
-      duration: 4, 
-      color: colors.naranjaCTA,
-      icon: 'pause',
-      instruction: 'Retén el aire en tus pulmones'
-    },
-    exhale: { 
-      text: 'Exhala', 
-      duration: 4, 
-      color: colors.marronTierra,
-      icon: 'arrow-down',
-      instruction: 'Suelta el aire lentamente por la boca'
-    },
-    hold2: { 
-      text: 'Mantén', 
-      duration: 4, 
-      color: colors.verdeBosque,
-      icon: 'pause',
-      instruction: 'Mantén los pulmones vacíos'
-    }
+  const goBackWithStatus = (status) => {
+    navigation.navigate('MainTabs', {
+      screen: 'Tu Día',
+      params: { breathingStatus: status },
+    });
   };
+
 
   useEffect(() => {
     let interval;
-    
+
     if (isActive && secondsRemaining > 0) {
       interval = setInterval(() => {
-        setSecondsRemaining(prev => prev - 1);
+        setSecondsRemaining((prev) => prev - 1);
       }, 1000);
     } else if (isActive && secondsRemaining === 0) {
       // Vibración suave al cambiar de fase
       Vibration.vibrate(50);
-      
-      // Cambiar a la siguiente fase
+
       const phases = ['inhale', 'hold1', 'exhale', 'hold2'];
       const currentIndex = phases.indexOf(phase);
       const nextIndex = (currentIndex + 1) % 4;
       const nextPhase = phases[nextIndex];
-      
+
       if (nextPhase === 'inhale') {
-        setCurrentCycle(prev => prev + 1);
-        if (currentCycle >= totalCycles - 1) {
-          // Ejercicio completado
-          handleComplete();
-          return;
-        }
+        // nuevo ciclo
+        setCurrentCycle((prev) => {
+          const nextCycle = prev + 1;
+          if (nextCycle >= totalCycles) {
+            // Ejercicio completado
+            handleComplete();
+            return prev;
+          }
+          return nextCycle;
+        });
       }
-      
+
       setPhase(nextPhase);
       setSecondsRemaining(phaseConfig[nextPhase].duration);
     }
 
     return () => clearInterval(interval);
-  }, [isActive, secondsRemaining, phase, currentCycle, totalCycles]);
+  }, [isActive, secondsRemaining, phase, totalCycles, phaseConfig]);
 
   useEffect(() => {
-    // Animaciones según la fase
-    if (isActive) {
-      if (phase === 'inhale') {
-        Animated.parallel([
-          Animated.timing(scaleAnim, {
-            toValue: 1.3,
-            duration: 4000,
-            useNativeDriver: true,
-          }),
-          Animated.timing(opacityAnim, {
-            toValue: 0.6,
-            duration: 4000,
-            useNativeDriver: true,
-          })
-        ]).start();
-      } else if (phase === 'exhale') {
-        Animated.parallel([
-          Animated.timing(scaleAnim, {
-            toValue: 1,
-            duration: 4000,
-            useNativeDriver: true,
-          }),
-          Animated.timing(opacityAnim, {
-            toValue: 0.3,
-            duration: 4000,
-            useNativeDriver: true,
-          })
-        ]).start();
-      }
-      
-      // Rotación continua del indicador exterior
-      Animated.loop(
-        Animated.timing(rotateAnim, {
-          toValue: 1,
-          duration: 16000, // Un ciclo completo de 4 fases
+    if (!isActive) return;
+
+    if (phase === 'inhale') {
+      Animated.parallel([
+        Animated.timing(scaleAnim, {
+          toValue: 1.3,
+          duration: phaseConfig.inhale.duration * 1000,
           useNativeDriver: true,
-        })
-      ).start();
+        }),
+        Animated.timing(opacityAnim, {
+          toValue: 0.6,
+          duration: phaseConfig.inhale.duration * 1000,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else if (phase === 'exhale') {
+      Animated.parallel([
+        Animated.timing(scaleAnim, {
+          toValue: 1,
+          duration: phaseConfig.exhale.duration * 1000,
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacityAnim, {
+          toValue: 0.3,
+          duration: phaseConfig.exhale.duration * 1000,
+          useNativeDriver: true,
+        }),
+      ]).start();
     }
-  }, [phase, isActive]);
+
+    // Rotación continua del indicador exterior (solo arrancamos una vez)
+    Animated.loop(
+      Animated.timing(rotateAnim, {
+        toValue: 1,
+        duration:
+          (phaseConfig.inhale.duration +
+            phaseConfig.hold1.duration +
+            phaseConfig.exhale.duration +
+            phaseConfig.hold2.duration) *
+          1000,
+        useNativeDriver: true,
+      })
+    ).start();
+  }, [phase, isActive, phaseConfig, scaleAnim, opacityAnim, rotateAnim]);
 
   const handleStart = () => {
+    setTotalCycles(routine?.cycles ?? 6);
     setIsActive(true);
     setPhase('inhale');
-    setSecondsRemaining(4);
+    setSecondsRemaining(phaseConfig.inhale.duration);
     setCurrentCycle(0);
-    setTotalCycles(6); // 6 ciclos = ~4 minutos
   };
 
   const handlePause = () => {
@@ -148,10 +170,10 @@ const BoxBreathingScreen = ({ navigation }) => {
     setIsActive(true);
   };
 
-  const handleStop = () => {
+  const handleStop = (status = 'incomplete') => {
     setIsActive(false);
     setPhase('inhale');
-    setSecondsRemaining(4);
+    setSecondsRemaining(phaseConfig.inhale.duration);
     setCurrentCycle(0);
     Animated.parallel([
       Animated.timing(scaleAnim, {
@@ -163,23 +185,23 @@ const BoxBreathingScreen = ({ navigation }) => {
         toValue: 0.3,
         duration: 300,
         useNativeDriver: true,
-      })
+      }),
     ]).start();
+
+    goBackWithStatus(status);
   };
 
   const handleComplete = () => {
     setIsActive(false);
-    // Aquí podrías guardar el progreso o mostrar una pantalla de completado
     Vibration.vibrate([0, 200, 100, 200]);
-    // Por ahora, simplemente reiniciamos
     setTimeout(() => {
-      handleStop();
-    }, 2000);
+      handleStop('completed');
+    }, 1500);
   };
 
   const spin = rotateAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: ['0deg', '360deg']
+    outputRange: ['0deg', '360deg'],
   });
 
   return (
@@ -191,15 +213,25 @@ const BoxBreathingScreen = ({ navigation }) => {
       <SafeAreaView style={styles.safeArea}>
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity 
-            onPress={() => navigation.goBack()}
+          <TouchableOpacity
+            onPress={() => handleStop('incomplete')}
             style={styles.backButton}
           >
-            <Ionicons name="arrow-back" size={24} color="rgba(255,255,255,0.96)" />
+            <Ionicons
+              name="arrow-back"
+              size={24}
+              color="rgba(255,255,255,0.96)"
+            />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Box Breathing</Text>
+          <Text style={styles.headerTitle}>
+            {routine?.title ?? 'Box Breathing'}
+          </Text>
           <TouchableOpacity style={styles.infoButton}>
-            <Ionicons name="information-circle-outline" size={24} color="rgba(255,255,255,0.96)" />
+            <Ionicons
+              name="information-circle-outline"
+              size={24}
+              color="rgba(255,255,255,0.96)"
+            />
           </TouchableOpacity>
         </View>
 
@@ -208,16 +240,24 @@ const BoxBreathingScreen = ({ navigation }) => {
           {/* Progress */}
           {isActive && (
             <View style={styles.progressContainer}>
-              <Text style={styles.cycleText}>Ciclo {currentCycle + 1} de {totalCycles}</Text>
+              <Text style={styles.cycleText}>
+                Ciclo {currentCycle + 1} de {totalCycles}
+              </Text>
               <View style={styles.progressBar}>
-                <View 
+                <View
                   style={[
-                    styles.progressFill, 
-                    { 
-                      width: `${((currentCycle * 4 + ['inhale', 'hold1', 'exhale', 'hold2'].indexOf(phase)) / (totalCycles * 4)) * 100}%`,
-                      backgroundColor: phaseConfig[phase].color 
-                    }
-                  ]} 
+                    styles.progressFill,
+                    {
+                      width: `${((currentCycle * 4 +
+                        ['inhale', 'hold1', 'exhale', 'hold2'].indexOf(
+                          phase
+                        )) /
+                        (totalCycles * 4)) *
+                        100
+                        }%`,
+                      backgroundColor: phaseConfig[phase].color,
+                    },
+                  ]}
                 />
               </View>
             </View>
@@ -226,33 +266,40 @@ const BoxBreathingScreen = ({ navigation }) => {
           {/* Breathing Circle */}
           <View style={styles.breathingContainer}>
             {/* Rotating outer ring */}
-            <Animated.View 
+            <Animated.View
               style={[
                 styles.outerRing,
-                { transform: [{ rotate: spin }] }
+                {
+                  transform: [{ rotate: spin }],
+                },
               ]}
             >
-              <View style={[styles.phaseIndicator, { backgroundColor: phaseConfig[phase].color }]} />
+              <View
+                style={[
+                  styles.phaseIndicator,
+                  { backgroundColor: phaseConfig[phase].color },
+                ]}
+              />
             </Animated.View>
 
             {/* Breathing circle */}
-            <Animated.View 
+            <Animated.View
               style={[
                 styles.breathingCircle,
                 {
                   transform: [{ scale: scaleAnim }],
                   opacity: opacityAnim,
                   backgroundColor: phaseConfig[phase].color,
-                }
+                },
               ]}
             />
 
             {/* Center content */}
             <View style={styles.centerContent}>
-              <Ionicons 
-                name={phaseConfig[phase].icon} 
-                size={40} 
-                color="rgba(255,255,255,0.96)" 
+              <Ionicons
+                name={phaseConfig[phase].icon}
+                size={40}
+                color="rgba(255,255,255,0.96)"
               />
               <Text style={styles.phaseText}>{phaseConfig[phase].text}</Text>
               <Text style={styles.secondsText}>{secondsRemaining}</Text>
@@ -260,22 +307,32 @@ const BoxBreathingScreen = ({ navigation }) => {
           </View>
 
           {/* Instructions */}
-          <Text style={styles.instruction}>{phaseConfig[phase].instruction}</Text>
+          <Text style={styles.instruction}>
+            {phaseConfig[phase].instruction}
+          </Text>
 
           {/* Phase indicators */}
           <View style={styles.phaseIndicators}>
-            {['inhale', 'hold1', 'exhale', 'hold2'].map((p, index) => (
+            {['inhale', 'hold1', 'exhale', 'hold2'].map((p) => (
               <View key={p} style={styles.phaseItem}>
-                <View 
+                <View
                   style={[
                     styles.phaseDot,
-                    { 
-                      backgroundColor: p === phase ? phaseConfig[p].color : 'rgba(255,255,255,0.2)',
-                      transform: [{ scale: p === phase ? 1.2 : 1 }]
-                    }
+                    {
+                      backgroundColor:
+                        p === phase
+                          ? phaseConfig[p].color
+                          : 'rgba(255,255,255,0.2)',
+                      transform: [{ scale: p === phase ? 1.2 : 1 }],
+                    },
                   ]}
                 />
-                <Text style={[styles.phaseLabel, p === phase && styles.activePhaseLabe]}>
+                <Text
+                  style={[
+                    styles.phaseLabel,
+                    p === phase && styles.activePhaseLabel,
+                  ]}
+                >
                   {phaseConfig[p].text}
                 </Text>
               </View>
@@ -286,10 +343,7 @@ const BoxBreathingScreen = ({ navigation }) => {
         {/* Controls */}
         <View style={styles.controls}>
           {!isActive && currentCycle === 0 ? (
-            <TouchableOpacity 
-              style={styles.startButton}
-              onPress={handleStart}
-            >
+            <TouchableOpacity style={styles.startButton} onPress={handleStart}>
               <LinearGradient
                 colors={[colors.naranjaCTA, colors.marronTierra]}
                 style={styles.startButtonGradient}
@@ -301,29 +355,44 @@ const BoxBreathingScreen = ({ navigation }) => {
           ) : (
             <View style={styles.controlButtons}>
               {isActive ? (
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.controlButton}
                   onPress={handlePause}
                 >
-                  <Ionicons name="pause" size={24} color="rgba(255,255,255,0.96)" />
+                  <Ionicons
+                    name="pause"
+                    size={24}
+                    color="rgba(255,255,255,0.96)"
+                  />
                   <Text style={styles.controlButtonText}>Pausar</Text>
                 </TouchableOpacity>
               ) : (
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.controlButton}
                   onPress={handleResume}
                 >
-                  <Ionicons name="play" size={24} color="rgba(255,255,255,0.96)" />
+                  <Ionicons
+                    name="play"
+                    size={24}
+                    color="rgba(255,255,255,0.96)"
+                  />
                   <Text style={styles.controlButtonText}>Continuar</Text>
                 </TouchableOpacity>
               )}
-              
-              <TouchableOpacity 
+
+              <TouchableOpacity
                 style={[styles.controlButton, styles.stopButton]}
-                onPress={handleStop}
+                onPress={() => handleStop('incomplete')}
               >
                 <Ionicons name="stop" size={24} color="#FF6B6B" />
-                <Text style={[styles.controlButtonText, { color: '#FF6B6B' }]}>Detener</Text>
+                <Text
+                  style={[
+                    styles.controlButtonText,
+                    { color: '#FF6B6B' },
+                  ]}
+                >
+                  Detener
+                </Text>
               </TouchableOpacity>
             </View>
           )}
@@ -332,9 +401,14 @@ const BoxBreathingScreen = ({ navigation }) => {
         {/* Tips */}
         <View style={styles.tipsContainer}>
           <View style={styles.tip}>
-            <Ionicons name="bulb-outline" size={16} color="rgba(255,255,255,0.5)" />
+            <Ionicons
+              name="bulb-outline"
+              size={16}
+              color="rgba(255,255,255,0.5)"
+            />
             <Text style={styles.tipText}>
-              Box Breathing ayuda a reducir el estrés y mejorar el enfoque
+              {routine?.tip ??
+                'Box Breathing ayuda a reducir el estrés y mejorar el enfoque'}
             </Text>
           </View>
         </View>
@@ -344,12 +418,9 @@ const BoxBreathingScreen = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  safeArea: {
-    flex: 1,
-  },
+  // mismos estilos que ya tenías, solo agrego activePhaseLabel si no estaba:
+  container: { flex: 1 },
+  safeArea: { flex: 1 },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -357,17 +428,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 16,
   },
-  backButton: {
-    padding: 8,
-  },
+  backButton: { padding: 8 },
   headerTitle: {
     fontSize: typography.sizes.h5,
     fontWeight: typography.weights.bold,
     color: colors.textoPrincipal,
   },
-  infoButton: {
-    padding: 8,
-  },
+  infoButton: { padding: 8 },
   content: {
     flex: 1,
     justifyContent: 'center',
@@ -390,10 +457,7 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     overflow: 'hidden',
   },
-  progressFill: {
-    height: '100%',
-    borderRadius: 2,
-  },
+  progressFill: { height: '100%', borderRadius: 2 },
   breathingContainer: {
     width: width * 0.7,
     height: width * 0.7,
@@ -424,9 +488,7 @@ const styles = StyleSheet.create({
     height: '85%',
     borderRadius: width * 0.35,
   },
-  centerContent: {
-    alignItems: 'center',
-  },
+  centerContent: { alignItems: 'center' },
   phaseText: {
     fontSize: 28,
     fontWeight: '700',
@@ -452,9 +514,7 @@ const styles = StyleSheet.create({
     gap: 24,
     marginBottom: 40,
   },
-  phaseItem: {
-    alignItems: 'center',
-  },
+  phaseItem: { alignItems: 'center' },
   phaseDot: {
     width: 12,
     height: 12,

@@ -9,6 +9,8 @@ import RegisterScreen from "../screens/registers/RegisterScreen";
 import { colors } from "../styles/theme";
 import { useAuth } from "../auth/AuthProvider";
 
+import BreatheSetupScreen from "../screens/BreatheSetupScreen";
+
 const Stack = createNativeStackNavigator();
 
 export default function AppNavigator() {
@@ -31,6 +33,10 @@ export default function AppNavigator() {
       ) : (
         <>
           <Stack.Screen name="MainTabs" component={TabNavigator} />
+
+          {/* 👇 NUEVA SCREEN PARA EL SETUP DE BREATHE */}
+          <Stack.Screen name="BreatheSetup" component={BreatheSetupScreen} />
+
           <Stack.Screen name="BoxBreathing" component={BoxBreathingScreen} />
           <Stack.Screen name="SendaAIChat" component={SendaAIChatScreen} />
         </>
