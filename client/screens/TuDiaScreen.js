@@ -24,6 +24,7 @@ const TuDiaScreen = ({ navigation, route }) => {
   const [selectedRitual, setSelectedRitual] = useState('breathe');
   const [viewMode, setViewMode] = useState('today'); // 'today' o 'week'
   const [breathingStatus, setBreathingStatus] = useState(null);
+  const [breathingRoutineTitle, setBreathingRoutineTitle] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
   const fadeAnim = React.useRef(new Animated.Value(0)).current;
   const slideAnim = React.useRef(new Animated.Value(30)).current;
@@ -185,12 +186,29 @@ const TuDiaScreen = ({ navigation, route }) => {
   const todayKey = getDayKey();
   const todayPlan = weekPlan[todayKey] || weekPlan.monday; // Fallback a monday para testing
 
+  // useEffect(() => {
+  //   if (route?.params?.breathingStatus) {
+  //     setBreathingStatus(route.params.breathingStatus);
+  //     navigation.setParams({ breathingStatus: undefined });
+  //   }
+  // }, [route?.params?.breathingStatus]);
+
   useEffect(() => {
-    if (route?.params?.breathingStatus) {
-      setBreathingStatus(route.params.breathingStatus);
-      navigation.setParams({ breathingStatus: undefined });
+    const statusFromRoute = route?.params?.breathingStatus;
+    const titleFromRoute = route?.params?.breathingRoutineTitle;
+
+    if (statusFromRoute || titleFromRoute) {
+      if (statusFromRoute) setBreathingStatus(statusFromRoute);
+      if (titleFromRoute) setBreathingRoutineTitle(titleFromRoute);
+
+      // limpiamos params para que no se vuelva a disparar
+      navigation.setParams({
+        breathingStatus: undefined,
+        breathingRoutineTitle: undefined,
+      });
     }
-  }, [route?.params?.breathingStatus]);
+  }, [route?.params?.breathingStatus, route?.params?.breathingRoutineTitle]);
+
 
 
   useEffect(() => {
@@ -281,9 +299,13 @@ const TuDiaScreen = ({ navigation, route }) => {
             </View>
           </View>
           <View style={styles.plannedContent}>
-            <Text style={styles.plannedName}>Sesión personalizada de respiración</Text>
+            <Text style={styles.plannedName}>
+              {breathingRoutineTitle || 'Sesión personalizada de respiración'}
+            </Text>
             <Text style={styles.plannedDuration}>
-              Generada según tu estado de ánimo de hoy
+              {breathingRoutineTitle
+                ? 'Generada según tu estado de ánimo de hoy'
+                : 'Se ajusta a tu estado de ánimo y objetivo diarios'}
             </Text>
           </View>
           <TouchableOpacity
@@ -296,6 +318,7 @@ const TuDiaScreen = ({ navigation, route }) => {
           </TouchableOpacity>
         </View>
       )}
+
 
 
       {selectedRitual === 'train' && todayPlan.workout && (

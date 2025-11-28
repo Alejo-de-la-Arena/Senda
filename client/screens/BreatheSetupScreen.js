@@ -1,18 +1,18 @@
 // screens/BreatheSetupScreen.js
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
     View,
     Text,
     StyleSheet,
     TouchableOpacity,
     SafeAreaView,
+    Animated,
     ActivityIndicator,
     Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, typography, spacing, borderRadius } from '../styles/theme';
-// Ajustá esta import según tu proyecto
 import { api } from '../api/api';
 
 const moods = [
@@ -35,6 +35,35 @@ const BreatheSetupScreen = ({ navigation }) => {
     const [selectedMinutes, setSelectedMinutes] = useState(7);
     const [selectedGoal, setSelectedGoal] = useState('foco');
     const [loading, setLoading] = useState(false);
+
+    const loadingAnim = useRef(new Animated.Value(0)).current;
+
+    useEffect(() => {
+        let animation;
+        if (loading) {
+            animation = Animated.loop(
+                Animated.sequence([
+                    Animated.timing(loadingAnim, {
+                        toValue: 1,
+                        duration: 700,
+                        useNativeDriver: true,
+                    }),
+                    Animated.timing(loadingAnim, {
+                        toValue: 0,
+                        duration: 700,
+                        useNativeDriver: true,
+                    }),
+                ])
+            );
+            animation.start();
+        } else {
+            loadingAnim.setValue(0);
+        }
+
+        return () => {
+            if (animation) animation.stop();
+        };
+    }, [loading, loadingAnim]);
 
     const handleGenerateRoutine = async () => {
         try {
@@ -161,27 +190,78 @@ const BreatheSetupScreen = ({ navigation }) => {
 
                 <View style={styles.footer}>
                     <TouchableOpacity
-                        style={styles.mainButton}
+                        style={[
+                            styles.generateButton,
+                            loading && { opacity: 0.7 },
+                        ]}
                         onPress={handleGenerateRoutine}
                         disabled={loading}
                     >
-                        <LinearGradient
-                            colors={[colors.naranjaCTA, colors.marronTierra]}
-                            style={styles.mainButtonGradient}
-                        >
-                            {loading ? (
+                        {loading ? (
+                            <View style={styles.generateButtonContent}>
                                 <ActivityIndicator color="#fff" />
-                            ) : (
-                                <>
-                                    <Ionicons name="sparkles" size={20} color="#fff" />
-                                    <Text style={styles.mainButtonText}>
-                                        Generar rutina personalizada
-                                    </Text>
-                                </>
-                            )}
-                        </LinearGradient>
+                                <Text style={styles.generateButtonText}>
+                                    Generando tu rutina...
+                                </Text>
+                            </View>
+                        ) : (
+                            <View style={styles.generateButtonContent}>
+                                <Ionicons name="sparkles-outline" size={20} color="#fff" />
+                                <Text style={styles.generateButtonText}>
+                                    Generar rutina personalizada
+                                </Text>
+                            </View>
+                        )}
                     </TouchableOpacity>
                 </View>
+                {loading && (
+                    <View style={styles.loadingOverlay}>
+                        <Animated.View
+                            style={[
+                                styles.loadingCircleWrapper,
+                                {
+                                    transform: [
+                                        {
+                                            scale: loadingAnim.interpolate({
+                                                inputRange: [0, 1],
+                                                outputRange: [0.95, 1.1],
+                                            }),
+                                        },
+                                        {
+                                            rotate: loadingAnim.interpolate({
+                                                inputRange: [0, 1],
+                                                outputRange: ['0deg', '30deg'],
+                                            }),
+                                        },
+                                    ],
+                                    opacity: loadingAnim.interpolate({
+                                        inputRange: [0, 1],
+                                        outputRange: [0.4, 0.9],
+                                    }),
+                                },
+                            ]}
+                        >
+                            <LinearGradient
+                                colors={[
+                                    colors.azulProfundo,
+                                    colors.verdeBosque,
+                                    colors.marronTierra,
+                                ]}
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 1 }}
+                                style={styles.loadingCircle}
+                            />
+                        </Animated.View>
+
+                        <Text style={styles.loadingText}>
+                            Diseñando tu respiración de hoy
+                        </Text>
+                        <Text style={styles.loadingSubtext}>
+                            Ajustando tiempos y fases según tu estado y objetivo
+                        </Text>
+                    </View>
+                )}
+
             </SafeAreaView>
         </LinearGradient>
     );
@@ -289,6 +369,60 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         color: '#fff',
     },
+    generateButton: {
+        marginTop: 24,
+        borderRadius: 999,
+        overflow: 'hidden',
+        backgroundColor: colors.naranjaCTA,
+    },
+    generateButtonContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 14,
+        gap: 8,
+    },
+    generateButtonText: {
+        color: '#fff',
+        fontSize: 15,
+        fontWeight: '700',
+    },
+    loadingOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0,0,0,0.65)', 
+        paddingHorizontal: 32,
+    },
+    loadingCircleWrapper: {
+        width: 130,
+        height: 130,
+        borderRadius: 65,
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 20,
+    },
+    loadingCircle: {
+        width: '100%',
+        height: '100%',
+        borderRadius: 65,
+        borderWidth: 2,
+        borderColor: 'rgba(255,255,255,0.6)',
+    },
+    loadingText: {
+        color: 'rgba(255,255,255,0.96)',
+        fontSize: 16,
+        fontWeight: '800',
+        textAlign: 'center',
+        letterSpacing: 0.4,
+        marginBottom: 6,
+    },
+    loadingSubtext: {
+        color: 'rgba(255,255,255,0.7)',
+        fontSize: 13,
+        textAlign: 'center',
+    },
+
 });
 
 export default BreatheSetupScreen;

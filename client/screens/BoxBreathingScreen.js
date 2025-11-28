@@ -13,6 +13,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, typography, spacing, borderRadius, shadows } from '../styles/theme';
+import { Audio } from 'expo-av';
 
 const { width } = Dimensions.get('window');
 
@@ -64,13 +65,7 @@ const BoxBreathingScreen = ({ navigation, route }) => {
   const opacityAnim = useRef(new Animated.Value(0.3)).current;
   const rotateAnim = useRef(new Animated.Value(0)).current;
 
-  const goBackWithStatus = (status) => {
-    navigation.navigate('MainTabs', {
-      screen: 'Tu Día',
-      params: { breathingStatus: status },
-    });
-  };
-
+  const breathingSoundRef = useRef(null);
 
   useEffect(() => {
     let interval;
@@ -154,27 +149,96 @@ const BoxBreathingScreen = ({ navigation, route }) => {
     ).start();
   }, [phase, isActive, phaseConfig, scaleAnim, opacityAnim, rotateAnim]);
 
-  const handleStart = () => {
+  useEffect(() => {
+    let sound;
+
+    const setupAudio = async () => {
+      try {
+        await Audio.setAudioModeAsync({
+          playsInSilentModeIOS: true,
+          allowsRecordingIOS: false,
+          staysActiveInBackground: false,
+        });
+
+        const result = await Audio.Sound.createAsync(
+          // 🔔 PONÉ TU ARCHIVO REAL ACÁ
+          require('../assets/sounds/breathing.mp3')
+
+        );
+
+        sound = result.sound;
+        breathingSoundRef.current = sound;
+        await sound.setIsLoopingAsync(true);
+        await sound.setVolumeAsync(0.35); // volumen suave
+      } catch (e) {
+        console.log('Error cargando sonido de respiración:', e);
+      }
+    };
+
+    setupAudio();
+
+    return () => {
+      if (sound) {
+        sound.unloadAsync();
+      }
+    };
+  }, []);
+
+  const goBackWithStatus = (status) => {
+    navigation.navigate('MainTabs', {
+      screen: 'Tu Día',
+      params: {
+        breathingStatus: status,
+        breathingRoutineTitle: routine?.title || null,
+      },
+    });
+  };
+
+  const handleStart = async () => {
     setTotalCycles(routine?.cycles ?? 6);
     setIsActive(true);
     setPhase('inhale');
     setSecondsRemaining(phaseConfig.inhale.duration);
     setCurrentCycle(0);
+
+    try {
+      if (breathingSoundRef.current) {
+        await breathingSoundRef.current.replayAsync();
+      }
+    } catch (e) {
+      console.log('Error reproduciendo sonido:', e);
+    }
   };
 
-  const handlePause = () => {
+  const handlePause = async () => {
     setIsActive(false);
+    try {
+      if (breathingSoundRef.current) {
+        await breathingSoundRef.current.pauseAsync();
+      }
+    } catch (e) {
+      console.log('Error pausando sonido:', e);
+    }
   };
 
-  const handleResume = () => {
+  const handleResume = async () => {
     setIsActive(true);
+    try {
+      if (breathingSoundRef.current) {
+        await breathingSoundRef.current.playAsync();
+      }
+    } catch (e) {
+      console.log('Error continuando sonido:', e);
+    }
   };
 
-  const handleStop = (status = 'incomplete') => {
+
+  const handleStop = async (status = 'incomplete') => {
     setIsActive(false);
     setPhase('inhale');
     setSecondsRemaining(phaseConfig.inhale.duration);
     setCurrentCycle(0);
+
     Animated.parallel([
       Animated.timing(scaleAnim, {
         toValue: 1,
@@ -188,8 +252,18 @@ const BoxBreathingScreen = ({ navigation, route }) => {
       }),
     ]).start();
 
+    // 👇 frenamos sonido
+    try {
+      if (breathingSoundRef.current) {
+        await breathingSoundRef.current.stopAsync();
+      }
+    } catch (e) {
+      console.log('Error frenando sonido:', e);
+    }
+
     goBackWithStatus(status);
   };
+
 
   const handleComplete = () => {
     setIsActive(false);
@@ -327,12 +401,7 @@ const BoxBreathingScreen = ({ navigation, route }) => {
                     },
                   ]}
                 />
-                <Text
-                  style={[
-                    styles.phaseLabel,
-                    p === phase && styles.activePhaseLabel,
-                  ]}
-                >
+                <Text style={[styles.phaseLabel, p === phase && styles.activePhaseLabel]}>
                   {phaseConfig[p].text}
                 </Text>
               </View>
@@ -510,11 +579,15 @@ const styles = StyleSheet.create({
   },
   phaseIndicators: {
     flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 24,
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
     marginBottom: 40,
   },
-  phaseItem: { alignItems: 'center' },
+  phaseItem: {
+    flex: 1,
+    alignItems: 'center',
+    maxWidth: 90,
+  },
   phaseDot: {
     width: 12,
     height: 12,
@@ -522,8 +595,9 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   phaseLabel: {
-    fontSize: 12,
+    fontSize: 11,
     color: 'rgba(255,255,255,0.4)',
+    textAlign: 'center',
   },
   activePhaseLabel: {
     color: 'rgba(255,255,255,0.8)',
