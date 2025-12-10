@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -8,15 +8,20 @@ import {
   Animated,
   Dimensions,
   TouchableOpacity,
-  Platform
+  Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, typography, spacing, borderRadius, shadows } from '../styles/theme';
 import WeekStrip from '../components/WeekStrip';
 import PillSwitcher from '../components/PillSwitcher';
-import RitualCard from '../components/RitualCard';
 import SupplementsModal from '../components/SupplementsModal';
+
+import { getMe } from '../api/user';
+
+import { getDiet, refreshDiet } from '../api/diet';
+
 
 const { height } = Dimensions.get('window');
 
@@ -29,6 +34,10 @@ const TuDiaScreen = ({ navigation, route }) => {
   const fadeAnim = React.useRef(new Animated.Value(0)).current;
   const slideAnim = React.useRef(new Animated.Value(30)).current;
 
+  const [diet, setDiet] = useState(null);
+  const [dietLoading, setDietLoading] = useState(false);
+  const [dietError, setDietError] = useState(null);
+
   // Estado para suplementos
   const [supplements, setSupplements] = useState([
     { id: 1, name: 'espirulina', taken: false, time: 'Mañana', dose: '2 pastillas' },
@@ -37,20 +46,19 @@ const TuDiaScreen = ({ navigation, route }) => {
     { id: 4, name: 'Mejunge', taken: false, time: 'Tarde', dose: '1' },
   ]);
 
-  const toggleSupplement = (id) => {
-    // Vibración deshabilitada para Expo Snack
-    // Uncomment if using on physical device:
-    // if (Platform.OS !== 'web') {
-    //   const Haptics = require('expo-haptics');
-    //   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    // }
+  // Usuario de nuestra tabla User (id numérico: /users/me)
+  const [me, setMe] = useState(null);
+  const [meLoading, setMeLoading] = useState(true);
 
+
+
+  const toggleSupplement = (id) => {
     setSupplements(supplements.map(supp =>
       supp.id === id ? { ...supp, taken: !supp.taken } : supp
     ));
   };
 
-  // Plan semanal completo (esto vendría de una base de datos/storage)
+  // Plan semanal ficticio para otras partes de la UI (lo mantenemos por ahora)
   const weekPlan = {
     monday: {
       dayType: 'intense',
@@ -186,13 +194,7 @@ const TuDiaScreen = ({ navigation, route }) => {
   const todayKey = getDayKey();
   const todayPlan = weekPlan[todayKey] || weekPlan.monday; // Fallback a monday para testing
 
-  // useEffect(() => {
-  //   if (route?.params?.breathingStatus) {
-  //     setBreathingStatus(route.params.breathingStatus);
-  //     navigation.setParams({ breathingStatus: undefined });
-  //   }
-  // }, [route?.params?.breathingStatus]);
-
+  // Breathe status desde route
   useEffect(() => {
     const statusFromRoute = route?.params?.breathingStatus;
     const titleFromRoute = route?.params?.breathingRoutineTitle;
@@ -201,7 +203,6 @@ const TuDiaScreen = ({ navigation, route }) => {
       if (statusFromRoute) setBreathingStatus(statusFromRoute);
       if (titleFromRoute) setBreathingRoutineTitle(titleFromRoute);
 
-      // limpiamos params para que no se vuelva a disparar
       navigation.setParams({
         breathingStatus: undefined,
         breathingRoutineTitle: undefined,
@@ -209,10 +210,8 @@ const TuDiaScreen = ({ navigation, route }) => {
     }
   }, [route?.params?.breathingStatus, route?.params?.breathingRoutineTitle]);
 
-
-
+  // Animación de entrada
   useEffect(() => {
-    // Animación de entrada
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -226,6 +225,105 @@ const TuDiaScreen = ({ navigation, route }) => {
       }),
     ]).start();
   }, []);
+
+
+  // Carga DietPlan
+  const loadDietPlan = async ({ allowRefresh } = { allowRefresh: false }) => {
+    if (!me) return;
+    setDietLoading(true);
+    setDietError(null);
+
+    try {
+      if (allowRefresh) {
+        await refreshDiet(me.id);           // POST /users/:id/diet/refresh
+        const created = await getDiet(me.id); // GET /users/:id/diet
+        setDiet(created);
+        return;
+      }
+
+      // MODO SOLO LECTURA (al entrar a la screen)
+      const existing = await getDiet(me.id);
+      if (existing && !existing.error) {
+        setDiet(existing);
+        return;
+      }
+
+      // Si llega acá es que no hay plan pero tampoco pedimos refresh automático
+      setDiet(null);
+    } catch (err) {
+      const status = err?.response?.status;
+
+      if (status === 404 && !allowRefresh) {
+        // No hay plan y no queremos regenerar → simplemente no mostramos nada
+        setDiet(null);
+        return;
+      }
+
+      console.log("Error leyendo / generando DietPlan:", err?.response?.data || err);
+      setDietError("No se pudo generar tu plan de comidas. Probá más tarde.");
+    } finally {
+      setDietLoading(false);
+    }
+  };
+
+
+  useEffect(() => {
+    if (me) {
+      // Solo intenta leer si ya existe, NO regenera automáticamente
+      loadDietPlan({ allowRefresh: false });
+    }
+  }, [me]);
+
+
+
+  // Cargar datos de nuestra tabla User cuando la screen monta
+  useEffect(() => {
+    let mounted = true;
+
+    (async () => {
+      try {
+        const data = await getMe(); // GET /users/me
+        if (mounted) {
+          setMe(data);      // data.id es el que usa /users/:id/diet
+        }
+      } catch (err) {
+        console.log('Error en getMe():', err?.response?.data || err);
+      } finally {
+        if (mounted) setMeLoading(false);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+
+  // Adapta DietPlan.plan a la estructura que usa la UI
+  const dietToday = useMemo(() => {
+    if (!diet || !diet.plan) return null;
+    const plan = diet.plan;
+
+    const result = {
+      totalCalories: plan.total_kcal || null,
+      meals: {},
+    };
+
+    if (Array.isArray(plan.meals)) {
+      plan.meals.forEach((m) => {
+        const key = m.id || (m.label || "meal").toLowerCase();
+        result.meals[key] = {
+          name: m.title,
+          time: m.time || "",
+          calories: m.kcal || 0,
+          prepared: false,
+        };
+      });
+    }
+
+    return result;
+  }, [diet]);
+
 
   const renderTodayView = () => (
     <>
@@ -264,7 +362,7 @@ const TuDiaScreen = ({ navigation, route }) => {
             <View style={styles.shoppingAlertContent}>
               <Text style={styles.shoppingAlertTitle}>Lista de Compras Lista</Text>
               <Text style={styles.shoppingAlertSubtext}>
-                {todayPlan.shoppingList.filter(i => !i.bought).length} items • {todayPlan.estimatedBudget}
+                {todayPlan.shoppingList?.filter(i => !i.bought).length ?? 0} items • {todayPlan.estimatedBudget}
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color="white" />
@@ -272,7 +370,7 @@ const TuDiaScreen = ({ navigation, route }) => {
         </TouchableOpacity>
       )}
 
-      {/* Ritual Switcher con contenido del día */}
+      {/* Ritual Switcher */}
       <PillSwitcher
         selected={selectedRitual}
         onSelect={setSelectedRitual}
@@ -319,8 +417,6 @@ const TuDiaScreen = ({ navigation, route }) => {
         </View>
       )}
 
-
-
       {selectedRitual === 'train' && todayPlan.workout && (
         <View style={styles.plannedCard}>
           <View style={styles.plannedHeader}>
@@ -352,45 +448,107 @@ const TuDiaScreen = ({ navigation, route }) => {
         </View>
       )}
 
-      {selectedRitual === 'eat' && todayPlan.meals && (
+      {selectedRitual === "eat" && (
         <View style={styles.mealsContainer}>
           <View style={styles.mealsHeader}>
-            <Text style={styles.mealsTitle}>Plan de Comidas de Hoy</Text>
-            <Text style={styles.mealsCalories}>{todayPlan.totalCalories} kcal</Text>
-          </View>
-          {Object.entries(todayPlan.meals).map(([mealType, meal]) => (
-            <View key={mealType} style={styles.mealCard}>
-              <View style={styles.mealTime}>
-                <Text style={styles.mealTimeText}>{meal.time}</Text>
-              </View>
-              <View style={styles.mealInfo}>
-                <Text style={styles.mealType}>{mealType.charAt(0).toUpperCase() + mealType.slice(1)}</Text>
-                <Text style={styles.mealName}>{meal.name}</Text>
-                <Text style={styles.mealCalories}>{meal.calories} kcal</Text>
-              </View>
-              <View style={styles.mealStatus}>
-                {meal.prepared ? (
-                  <View style={styles.preparedBadge}>
-                    <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
-                    <Text style={styles.preparedText}>Listo</Text>
-                  </View>
-                ) : (
-                  <TouchableOpacity style={styles.prepareButton}>
-                    <Text style={styles.prepareButtonText}>Preparar</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
+            <View>
+              <Text style={styles.mealsTitle}>Plan de Comidas de Hoy</Text>
+              <Text style={styles.mealsSubtitle}>
+                Generado en tiempo real según tu perfil
+              </Text>
             </View>
-          ))}
-          {todayPlan.isMealPrepDay && (
-            <TouchableOpacity style={styles.mealPrepReminder}>
-              <Ionicons name="restaurant-outline" size={20} color="#FFB347" />
-              <Text style={styles.mealPrepText}>Hoy es día de Meal Prep</Text>
-              <Ionicons name="chevron-forward" size={16} color="#FFB347" />
-            </TouchableOpacity>
+            {dietToday?.totalCalories && (
+              <Text style={styles.mealsCalories}>
+                {dietToday.totalCalories} kcal
+              </Text>
+            )}
+          </View>
+
+          {/* Botón principal de IA */}
+          <TouchableOpacity
+            style={[
+              styles.regenerateButton,
+              (dietLoading || !me) && { opacity: 0.7 },
+            ]}
+            onPress={() => loadDietPlan({ allowRefresh: true })}
+            disabled={dietLoading || !me}
+          >
+            {dietLoading ? (
+              <>
+                <ActivityIndicator size="small" color="#fff" />
+                <Text style={styles.regenerateButtonText}>
+                  Generando tu plan con IA...
+                </Text>
+              </>
+            ) : (
+              <Text style={styles.regenerateButtonText}>
+                {diet
+                  ? "Regenerar plan personalizado de hoy"
+                  : "Generar plan personalizado de hoy"}
+              </Text>
+            )}
+          </TouchableOpacity>
+
+          {/* Mensajes de estado */}
+          {dietError && !dietLoading && (
+            <View style={{ paddingVertical: 12 }}>
+              <Text style={{ color: "#ffb3b3", fontSize: 13, marginBottom: 8 }}>
+                {dietError}
+              </Text>
+              <TouchableOpacity
+                style={styles.prepareButton}
+                onPress={() => loadDietPlan({ allowRefresh: true })}
+              >
+                <Text style={styles.prepareButtonText}>Reintentar</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {!diet && !dietLoading && !dietError && (
+            <Text style={styles.mealsHint}>
+              Todavía no generaste tu plan de hoy. Tocá el botón de arriba y te
+              armamos un plan 100% personalizado con IA.
+            </Text>
+          )}
+
+          {/* Meals reales de la IA */}
+          {!dietLoading && !dietError && dietToday?.meals && (
+            <>
+              {Object.entries(dietToday.meals).map(([mealType, meal]) => (
+                <View key={mealType} style={styles.mealCard}>
+                  <View style={styles.mealTime}>
+                    <Text style={styles.mealTimeText}>{meal.time}</Text>
+                  </View>
+                  <View style={styles.mealInfo}>
+                    <Text style={styles.mealType}>
+                      {mealType.charAt(0).toUpperCase() + mealType.slice(1)}
+                    </Text>
+                    <Text style={styles.mealName}>{meal.name}</Text>
+                    <Text style={styles.mealCalories}>{meal.calories} kcal</Text>
+                  </View>
+                  <View style={styles.mealStatus}>
+                    {meal.prepared ? (
+                      <View style={styles.preparedBadge}>
+                        <Ionicons
+                          name="checkmark-circle"
+                          size={20}
+                          color="#4CAF50"
+                        />
+                        <Text style={styles.preparedText}>Listo</Text>
+                      </View>
+                    ) : (
+                      <TouchableOpacity style={styles.prepareButton}>
+                        <Text style={styles.prepareButtonText}>Preparar</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+              ))}
+            </>
           )}
         </View>
       )}
+
 
       {/* Supplements Tracker */}
       <View style={styles.supplementsTracker}>
@@ -722,17 +880,54 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 20,
   },
   mealsTitle: {
     fontSize: 18,
     fontWeight: '700',
     color: 'rgba(255,255,255,0.96)',
   },
+  mealsSubtitle: {
+    marginTop: 4,
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.80)',
+    fontWeight: '500',
+  },
   mealsCalories: {
     fontSize: 15,
     fontWeight: '600',
     color: 'rgba(255,255,255,0.6)',
+  },
+  regenerateButton: {
+    marginTop: 20,
+    marginBottom: 22,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: 999,
+    backgroundColor: colors.azulProfundo,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.35,
+    shadowRadius: 18,
+    elevation: 6,
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.18)",
+  },
+  regenerateButtonText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "700",
+    letterSpacing: 0.6,
+    textAlign: "center",
+  },
+  mealsHint: {
+    fontSize: 13,
+    color: "rgba(255,255,255,0.7)",
+    marginBottom: 10,
   },
   mealCard: {
     flexDirection: 'row',
@@ -999,7 +1194,7 @@ const styles = StyleSheet.create({
   weekDayActivityText: {
     fontSize: 13,
     color: 'rgba(255,255,255,0.6)',
-  },
+  }
 });
 
 export default TuDiaScreen;

@@ -1,11 +1,11 @@
-const path = require('path');
-const dotenv = require('dotenv');
+const required = [
+    'SUPABASE_URL',
+    'SUPABASE_ANON_KEY',
+    'SUPABASE_SERVICE_ROLE_KEY',
+    'PORT'
+];
 
-dotenv.config({ path: path.resolve(__dirname, '.env') });
-
-const required = ['SUPABASE_URL', 'SUPABASE_ANON_KEY', 'SUPABASE_SERVICE_ROLE_KEY', 'PORT'];
-
-required.forEach((k) => {
+required.forEach(k => {
     if (!process.env[k]) console.warn(`[env] Falta ${k} en .env`);
 });
 
