@@ -1,4 +1,6 @@
-// index.js (tu archivo original)
+
+require('dotenv').config({ path: require('path').resolve(__dirname, '.env') });
+console.log("[SENDA SERVER] Using Supabase URL:", process.env.SUPABASE_URL);
 const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');

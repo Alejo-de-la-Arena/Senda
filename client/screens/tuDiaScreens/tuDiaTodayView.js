@@ -24,6 +24,14 @@ const TuDiaTodayView = ({
   training, // { hasProgram, program, workouts[] }
   trainingLoading,
   trainingError,
+  diet,
+  dietToday,
+  dietLoading,
+  dietError,
+  regenLeft,
+  regenMax,
+  onGenerateDiet,
+  onPressMeal,
 }) => {
   const hasProgram = !!training?.hasProgram;
 
@@ -116,8 +124,8 @@ const TuDiaTodayView = ({
                 {breathingStatus === "completed"
                   ? "Completado"
                   : breathingStatus === "incomplete"
-                  ? "No realizada del todo"
-                  : "Pendiente"}
+                    ? "No realizada del todo"
+                    : "Pendiente"}
               </Text>
             </View>
           </View>
@@ -236,55 +244,140 @@ const TuDiaTodayView = ({
       )}
 
       {/* Comidas */}
-      {selectedRitual === "eat" && todayPlan.meals && (
+      {selectedRitual === "eat" && (
         <View style={styles.mealsContainer}>
           <View style={styles.mealsHeader}>
-            <Text style={styles.mealsTitle}>Plan de Comidas de Hoy</Text>
-            {todayPlan.totalCalories && (
+            <View>
+              <Text style={styles.mealsTitle}>Plan de Comidas de Hoy</Text>
+              <Text style={styles.mealsSubtitle}>
+                Generado en tiempo real según tu perfil
+              </Text>
+            </View>
+            {dietToday?.totalCalories && (
               <Text style={styles.mealsCalories}>
-                {todayPlan.totalCalories} kcal
+                {dietToday.totalCalories} kcal
               </Text>
             )}
           </View>
-          {Object.entries(todayPlan.meals).map(([mealType, meal]) => (
-            <View key={mealType} style={styles.mealCard}>
-              <View style={styles.mealTime}>
-                <Text style={styles.mealTimeText}>{meal.time}</Text>
-              </View>
-              <View style={styles.mealInfo}>
-                <Text style={styles.mealType}>
-                  {mealType.charAt(0).toUpperCase() + mealType.slice(1)}
+
+          {/* Botón principal de IA */}
+          <TouchableOpacity
+            style={[
+              styles.regenerateButton,
+              (dietLoading || regenLeft === 0) && { opacity: 0.5 },
+            ]}
+            onPress={onGenerateDiet}
+            disabled={dietLoading || regenLeft === 0}
+          >
+            {dietLoading ? (
+              <>
+                <ActivityIndicator size="small" color="#fff" />
+                <Text style={styles.regenerateButtonText}>
+                  Generando tu plan...
                 </Text>
-                <Text style={styles.mealName}>{meal.name}</Text>
-                <Text style={styles.mealCalories}>{meal.calories} kcal</Text>
-              </View>
-              <View style={styles.mealStatus}>
-                {meal.prepared ? (
-                  <View style={styles.preparedBadge}>
-                    <Ionicons
-                      name="checkmark-circle"
-                      size={20}
-                      color="#4CAF50"
-                    />
-                    <Text style={styles.preparedText}>Listo</Text>
-                  </View>
-                ) : (
-                  <TouchableOpacity style={styles.prepareButton}>
-                    <Text style={styles.prepareButtonText}>Preparar</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
+              </>
+            ) : (
+              <Text style={styles.regenerateButtonText}>
+                {diet
+                  ? "Regenerar plan personalizado de hoy"
+                  : "Generar plan personalizado de hoy"}
+              </Text>
+            )}
+          </TouchableOpacity>
+
+          <Text style={styles.mealsHint}>
+            Tocá cualquier comida para ver los ingredientes y cantidades exactas.
+          </Text>
+
+          {typeof regenLeft === "number" && regenMax && (
+            <Text style={styles.regenInfoText}>
+              {regenLeft > 0
+                ? `Te quedan ${regenLeft}/${regenMax} regeneraciones hoy`
+                : "Alcanzaste el máximo de regeneraciones para hoy."}
+            </Text>
+          )}
+
+          {/* Mensajes de estado */}
+          {dietError && !dietLoading && (
+            <View style={{ paddingVertical: 12 }}>
+              <Text
+                style={{ color: "#ffb3b3", fontSize: 13, marginBottom: 8 }}
+              >
+                {dietError}
+              </Text>
+              <TouchableOpacity
+                style={styles.prepareButton}
+                onPress={onGenerateDiet}
+              >
+                <Text style={styles.prepareButtonText}>Reintentar</Text>
+              </TouchableOpacity>
             </View>
-          ))}
+          )}
+
+          {!diet && !dietLoading && !dietError && (
+            <Text style={styles.mealsHint}>
+              Todavía no generaste tu plan de hoy. Tocá el botón de arriba y te
+              armamos un plan 100% personalizado con IA.
+            </Text>
+          )}
+
+          {/* Meals reales de la IA */}
+          {!dietLoading && !dietError && dietToday?.meals && (
+            <>
+              {Object.entries(dietToday.meals).map(([mealType, meal]) => (
+                <TouchableOpacity
+                  key={mealType}
+                  style={styles.mealCard}
+                  activeOpacity={0.9}
+                  onPress={() => onPressMeal({ ...meal, type: mealType })}
+                >
+                  <View style={styles.mealTime}>
+                    <Text style={styles.mealTimeText}>{meal.time}</Text>
+                  </View>
+                  <View style={styles.mealInfo}>
+                    <Text style={styles.mealType}>
+                      {mealType.charAt(0).toUpperCase() + mealType.slice(1)}
+                    </Text>
+                    <Text style={styles.mealName}>{meal.name}</Text>
+                    <Text style={styles.mealCalories}>
+                      {meal.calories} kcal
+                    </Text>
+                  </View>
+                  <View style={styles.mealStatus}>
+                    {meal.prepared ? (
+                      <View style={styles.preparedBadge}>
+                        <Ionicons
+                          name="checkmark-circle"
+                          size={20}
+                          color="#4CAF50"
+                        />
+                        <Text style={styles.preparedText}>Listo</Text>
+                      </View>
+                    ) : (
+                      <TouchableOpacity style={styles.prepareButton}>
+                        <Text style={styles.prepareButtonText}>Preparar</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </>
+          )}
+
           {todayPlan.isMealPrepDay && (
             <TouchableOpacity style={styles.mealPrepReminder}>
-              <Ionicons name="restaurant-outline" size={20} color="#FFB347" />
+              <Ionicons
+                name="restaurant-outline"
+                size={20}
+                color="#FFB347"
+              />
               <Text style={styles.mealPrepText}>Hoy es día de Meal Prep</Text>
               <Ionicons name="chevron-forward" size={16} color="#FFB347" />
             </TouchableOpacity>
           )}
         </View>
       )}
+
 
       {/* Suplementos */}
       <View style={styles.supplementsTracker}>

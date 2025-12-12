@@ -6,6 +6,9 @@ import {
   StyleSheet,
   SafeAreaView,
   Animated,
+  Modal,
+  Text,
+  TouchableOpacity,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import WeekStrip from "../../components/WeekStrip";
@@ -13,8 +16,10 @@ import SupplementsModal from "../../components/SupplementsModal";
 import { colors } from "../../styles/theme";
 import TuDiaTodayView from "./tuDiaTodayView";
 import TuDiaWeekView from "./tuDiaWeekView";
-import { getMyTraining } from "../../api/user"; // 👈 agrega esta función en tu api
+import { getMe, getMyTraining } from "../../api/user";
+import { getDiet, refreshDiet } from "../../api/diet";
 import { useAuth } from "../../auth/AuthProvider";
+
 
 const TuDiaScreen = ({ navigation, route }) => {
   const { auth } = useAuth();
@@ -22,6 +27,22 @@ const TuDiaScreen = ({ navigation, route }) => {
   const [viewMode, setViewMode] = useState("today"); // 'today' o 'week'
   const [breathingStatus, setBreathingStatus] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
+
+  const [diet, setDiet] = useState(null);
+  const [dietLoading, setDietLoading] = useState(false);
+  const [dietError, setDietError] = useState(null);
+
+  // Usuario de nuestra tabla User (id numérico: /users/me)
+  const [me, setMe] = useState(null);
+  const [meLoading, setMeLoading] = useState(true);
+
+  // Modal de ingredientes
+  const [selectedMeal, setSelectedMeal] = useState(null);
+  const [mealModalVisible, setMealModalVisible] = useState(false);
+
+  // Regeneraciones
+  const [regenLeft, setRegenLeft] = useState(null);
+  const [regenMax, setRegenMax] = useState(null);
 
   // Animaciones
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -86,7 +107,7 @@ const TuDiaScreen = ({ navigation, route }) => {
         console.log("response:", e?.response);
         setTrainingError(
           e?.response?.data?.error ||
-            "No pudimos cargar tu entrenamiento. Intentalo nuevamente."
+          "No pudimos cargar tu entrenamiento. Intentalo nuevamente."
         );
       } finally {
         setTrainingLoading(false);
@@ -95,6 +116,125 @@ const TuDiaScreen = ({ navigation, route }) => {
 
     loadTraining();
   }, [auth.session?.access_token]);
+
+  // Cargar datos de la tabla User
+  useEffect(() => {
+    let mounted = true;
+
+    (async () => {
+      try {
+        const data = await getMe(); // GET /users/me
+        if (mounted) {
+          setMe(data); // data.id es el que usa /users/:id/diet
+        }
+      } catch (err) {
+        console.log("Error en getMe():", err?.response?.data || err);
+      } finally {
+        if (mounted) setMeLoading(false);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  // Carga DietPlan (lectura o generación)
+  const loadDietPlan = async ({ allowRefresh } = { allowRefresh: false }) => {
+    if (!me) return;
+
+    setDietLoading(true);
+    setDietError(null);
+
+    try {
+      if (allowRefresh) {
+        //  Generar / regenerar plan (POST)
+        const refreshed = await refreshDiet(me.id); // POST /users/:id/diet/refresh
+
+        setDiet(refreshed);
+
+        if (typeof refreshed.remaining_regens === "number") {
+          setRegenLeft(refreshed.remaining_regens);
+          setRegenMax(refreshed.max_regens || 3);
+        }
+
+        return;
+      }
+
+      //  MODO SOLO LECTURA (al entrar a la screen)
+      const existing = await getDiet(me.id); // GET /users/:id/diet
+
+      if (existing && !existing.error) {
+        setDiet(existing);
+
+        if (typeof existing.remaining_regens === "number") {
+          setRegenLeft(existing.remaining_regens);
+          setRegenMax(existing.max_regens || 3);
+        }
+
+        return;
+      }
+
+      setDiet(null);
+    } catch (err) {
+      const status = err?.response?.status;
+      const data = err?.response?.data;
+
+      if (status === 404 && !allowRefresh) {
+        setDiet(null);
+        return;
+      }
+
+      if (status === 429) {
+        const remaining = data?.remaining_regens ?? 0;
+        const max = data?.max_regens ?? 3;
+
+        setRegenLeft(remaining);
+        setRegenMax(max);
+        setDietError("Alcanzaste el máximo de regeneraciones para hoy.");
+        console.log("Límite diario de regeneraciones:", data);
+        return;
+      }
+
+      console.log("Error leyendo / generando DietPlan:", data || err);
+      setDietError("No se pudo generar tu plan de comidas. Probá más tarde.");
+    } finally {
+      setDietLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (me) {
+      // Solo intenta leer si ya existe, NO regenera automáticamente
+      loadDietPlan({ allowRefresh: false });
+    }
+  }, [me]);
+
+  const dietToday = React.useMemo(() => {
+    if (!diet || !diet.plan) return null;
+    const plan = diet.plan;
+
+    const result = {
+      totalCalories: plan.total_kcal || null,
+      meals: {},
+    };
+
+    if (Array.isArray(plan.meals)) {
+      plan.meals.forEach((m) => {
+        const key = m.id || (m.label || "meal").toLowerCase();
+        result.meals[key] = {
+          name: m.title,
+          time: m.time || "",
+          calories: m.kcal || 0,
+          ingredients: m.ingredients || [],
+          prepared: false,
+        };
+      });
+    }
+
+    return result;
+  }, [diet]);
+
 
   // Plan semanal mockeado (por ahora para comidas / breathe / stats)
   const weekPlan = {
@@ -355,6 +495,17 @@ const TuDiaScreen = ({ navigation, route }) => {
                 training={training}
                 trainingLoading={trainingLoading}
                 trainingError={trainingError}
+                diet={diet}
+                dietToday={dietToday}
+                dietLoading={dietLoading}
+                dietError={dietError}
+                regenLeft={regenLeft}
+                regenMax={regenMax}
+                onGenerateDiet={() => loadDietPlan({ allowRefresh: true })}
+                onPressMeal={(mealWithType) => {
+                  setSelectedMeal(mealWithType);
+                  setMealModalVisible(true);
+                }}
               />
             ) : (
               <TuDiaWeekView
@@ -377,6 +528,60 @@ const TuDiaScreen = ({ navigation, route }) => {
           setModalVisible(false);
         }}
       />
+      
+      {/* Modal de ingredientes de la comida */}
+      <Modal
+        visible={mealModalVisible && !!selectedMeal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setMealModalVisible(false)}
+      >
+        <View style={styles.mealModalBackdrop}>
+          <View style={styles.mealModalContent}>
+            <Text style={styles.mealModalTitle}>
+              {selectedMeal?.name || "Comida"}
+            </Text>
+            <Text style={styles.mealModalSubtitle}>
+              {selectedMeal?.time
+                ? `${selectedMeal.time} · ${selectedMeal.calories} kcal`
+                : `${selectedMeal?.calories || 0} kcal`}
+            </Text>
+
+            <View style={styles.mealModalDivider} />
+
+            {Array.isArray(selectedMeal?.ingredients) &&
+              selectedMeal.ingredients.length > 0 ? (
+              <View style={styles.mealModalIngredientsList}>
+                {selectedMeal.ingredients.map((ing, idx) => (
+                  <View
+                    key={idx}
+                    style={styles.mealModalIngredientRow}
+                  >
+                    <Text style={styles.mealModalIngredientName}>
+                      {ing.name}
+                    </Text>
+                    <Text style={styles.mealModalIngredientAmount}>
+                      {ing.amount} {ing.unit}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <Text style={styles.mealModalNoIngredients}>
+                Aún no tenemos el detalle de ingredientes para esta comida.
+              </Text>
+            )}
+
+            <TouchableOpacity
+              style={styles.mealModalCloseButton}
+              onPress={() => setMealModalVisible(false)}
+            >
+              <Text style={styles.mealModalCloseText}>Cerrar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
     </LinearGradient>
   );
 };
