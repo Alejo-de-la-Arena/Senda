@@ -9,6 +9,7 @@ import {
   Dimensions,
   TouchableOpacity,
   Platform,
+  Modal,
   ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -50,6 +51,11 @@ const TuDiaScreen = ({ navigation, route }) => {
   const [me, setMe] = useState(null);
   const [meLoading, setMeLoading] = useState(true);
 
+  const [selectedMeal, setSelectedMeal] = useState(null);
+  const [mealModalVisible, setMealModalVisible] = useState(false);
+
+  const [regenLeft, setRegenLeft] = useState(null);
+  const [regenMax, setRegenMax] = useState(null);
 
 
   const toggleSupplement = (id) => {
@@ -230,41 +236,72 @@ const TuDiaScreen = ({ navigation, route }) => {
   // Carga DietPlan
   const loadDietPlan = async ({ allowRefresh } = { allowRefresh: false }) => {
     if (!me) return;
+
     setDietLoading(true);
     setDietError(null);
 
     try {
       if (allowRefresh) {
-        await refreshDiet(me.id);           // POST /users/:id/diet/refresh
-        const created = await getDiet(me.id); // GET /users/:id/diet
-        setDiet(created);
+        // 👉 Generar / regenerar plan (POST)
+        const refreshed = await refreshDiet(me.id); // POST /users/:id/diet/refresh
+
+        // El backend devuelve el DietPlan actualizado + info de regeneraciones
+        setDiet(refreshed);
+
+        if (typeof refreshed.remaining_regens === "number") {
+          setRegenLeft(refreshed.remaining_regens);
+          setRegenMax(refreshed.max_regens || 3);
+        }
+
         return;
       }
 
-      // MODO SOLO LECTURA (al entrar a la screen)
-      const existing = await getDiet(me.id);
+      // 👉 MODO SOLO LECTURA (al entrar a la screen)
+      const existing = await getDiet(me.id); // GET /users/:id/diet
+
       if (existing && !existing.error) {
         setDiet(existing);
+
+        // Por si en el GET también devolvés estos campos
+        if (typeof existing.remaining_regens === "number") {
+          setRegenLeft(existing.remaining_regens);
+          setRegenMax(existing.max_regens || 3);
+        }
+
         return;
       }
 
-      // Si llega acá es que no hay plan pero tampoco pedimos refresh automático
+      // No hay plan y no pedimos refresh automático
       setDiet(null);
     } catch (err) {
       const status = err?.response?.status;
+      const data = err?.response?.data;
 
+      // No hay plan y no queremos regenerar
       if (status === 404 && !allowRefresh) {
-        // No hay plan y no queremos regenerar → simplemente no mostramos nada
         setDiet(null);
         return;
       }
 
-      console.log("Error leyendo / generando DietPlan:", err?.response?.data || err);
+      // 👉 Límite diario de regeneraciones alcanzado
+      if (status === 429) {
+        const remaining = data?.remaining_regens ?? 0;
+        const max = data?.max_regens ?? 3;
+
+        setRegenLeft(remaining);
+        setRegenMax(max);
+        setDietError("Alcanzaste el máximo de regeneraciones para hoy.");
+        console.log("Límite diario de regeneraciones:", data);
+        return;
+      }
+
+      console.log("Error leyendo / generando DietPlan:", data || err);
       setDietError("No se pudo generar tu plan de comidas. Probá más tarde.");
     } finally {
       setDietLoading(false);
     }
   };
+
 
 
   useEffect(() => {
@@ -316,6 +353,7 @@ const TuDiaScreen = ({ navigation, route }) => {
           name: m.title,
           time: m.time || "",
           calories: m.kcal || 0,
+          ingredients: m.ingredients || [], // 👈 NUEVO
           prepared: false,
         };
       });
@@ -323,6 +361,7 @@ const TuDiaScreen = ({ navigation, route }) => {
 
     return result;
   }, [diet]);
+
 
 
   const renderTodayView = () => (
@@ -468,16 +507,16 @@ const TuDiaScreen = ({ navigation, route }) => {
           <TouchableOpacity
             style={[
               styles.regenerateButton,
-              (dietLoading || !me) && { opacity: 0.7 },
+              (dietLoading || !me || regenLeft === 0) && { opacity: 0.5 },
             ]}
-            onPress={() => loadDietPlan({ allowRefresh: true })}
-            disabled={dietLoading || !me}
+            onPress={() => loadDietPlan({ allowRefresh: true })}   // 👈 AHORA SÍ
+            disabled={dietLoading || !me || regenLeft === 0}
           >
             {dietLoading ? (
               <>
                 <ActivityIndicator size="small" color="#fff" />
                 <Text style={styles.regenerateButtonText}>
-                  Generando tu plan con IA...
+                  Generando tu plan...
                 </Text>
               </>
             ) : (
@@ -488,6 +527,19 @@ const TuDiaScreen = ({ navigation, route }) => {
               </Text>
             )}
           </TouchableOpacity>
+
+
+          <Text style={styles.mealsHint}>
+            Tocá cualquier comida para ver los ingredientes y cantidades exactas.
+          </Text>
+
+          {typeof regenLeft === "number" && regenMax && (
+            <Text style={styles.regenInfoText}>
+              {regenLeft > 0
+                ? `Te quedan ${regenLeft}/${regenMax} regeneraciones hoy`
+                : "Alcanzaste el máximo de regeneraciones para hoy."}
+            </Text>
+          )}
 
           {/* Mensajes de estado */}
           {dietError && !dietLoading && (
@@ -515,7 +567,15 @@ const TuDiaScreen = ({ navigation, route }) => {
           {!dietLoading && !dietError && dietToday?.meals && (
             <>
               {Object.entries(dietToday.meals).map(([mealType, meal]) => (
-                <View key={mealType} style={styles.mealCard}>
+                <TouchableOpacity
+                  key={mealType}
+                  style={styles.mealCard}
+                  activeOpacity={0.9}
+                  onPress={() => {
+                    setSelectedMeal({ ...meal, type: mealType });
+                    setMealModalVisible(true);
+                  }}
+                >
                   <View style={styles.mealTime}>
                     <Text style={styles.mealTimeText}>{meal.time}</Text>
                   </View>
@@ -529,20 +589,21 @@ const TuDiaScreen = ({ navigation, route }) => {
                   <View style={styles.mealStatus}>
                     {meal.prepared ? (
                       <View style={styles.preparedBadge}>
-                        <Ionicons
-                          name="checkmark-circle"
-                          size={20}
-                          color="#4CAF50"
-                        />
+                        <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
                         <Text style={styles.preparedText}>Listo</Text>
                       </View>
                     ) : (
-                      <TouchableOpacity style={styles.prepareButton}>
+                      <TouchableOpacity
+                        style={styles.prepareButton}
+                        onPress={() => {
+                          // acá más adelante podés marcarla como "preparada"
+                        }}
+                      >
                         <Text style={styles.prepareButtonText}>Preparar</Text>
                       </TouchableOpacity>
                     )}
                   </View>
-                </View>
+                </TouchableOpacity>
               ))}
             </>
           )}
@@ -723,6 +784,59 @@ const TuDiaScreen = ({ navigation, route }) => {
           setModalVisible(false);
         }}
       />
+
+      {/* Modal de ingredientes de la comida */}
+      <Modal
+        visible={mealModalVisible && !!selectedMeal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setMealModalVisible(false)}
+      >
+        <View style={styles.mealModalBackdrop}>
+          <View style={styles.mealModalContent}>
+            <Text style={styles.mealModalTitle}>
+              {selectedMeal?.name || "Comida"}
+            </Text>
+            <Text style={styles.mealModalSubtitle}>
+              {selectedMeal?.time
+                ? `${selectedMeal.time} · ${selectedMeal.calories} kcal`
+                : `${selectedMeal?.calories || 0} kcal`}
+            </Text>
+
+            <View style={styles.mealModalDivider} />
+
+            {Array.isArray(selectedMeal?.ingredients) &&
+              selectedMeal.ingredients.length > 0 ? (
+              <View style={styles.mealModalIngredientsList}>
+                {selectedMeal.ingredients.map((ing, idx) => (
+                  <View
+                    key={idx}
+                    style={styles.mealModalIngredientRow}
+                  >
+                    <Text style={styles.mealModalIngredientName}>
+                      {ing.name}
+                    </Text>
+                    <Text style={styles.mealModalIngredientAmount}>
+                      {ing.amount} {ing.unit}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <Text style={styles.mealModalNoIngredients}>
+                Aún no tenemos el detalle de ingredientes para esta comida.
+              </Text>
+            )}
+
+            <TouchableOpacity
+              style={styles.mealModalCloseButton}
+              onPress={() => setMealModalVisible(false)}
+            >
+              <Text style={styles.mealModalCloseText}>Cerrar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </LinearGradient>
   );
 };
@@ -1194,7 +1308,77 @@ const styles = StyleSheet.create({
   weekDayActivityText: {
     fontSize: 13,
     color: 'rgba(255,255,255,0.6)',
-  }
+  },
+  mealModalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.65)",
+    justifyContent: "flex-end",
+  },
+  mealModalContent: {
+    backgroundColor: "rgba(15,15,15,0.98)",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 28,
+    borderTopWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+  },
+  mealModalTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "rgba(255,255,255,0.96)",
+    marginBottom: 4,
+  },
+  mealModalSubtitle: {
+    fontSize: 13,
+    color: "rgba(255,255,255,0.6)",
+    marginBottom: 14,
+  },
+  mealModalDivider: {
+    height: 1,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    marginBottom: 12,
+  },
+  mealModalIngredientsList: {
+    marginBottom: 18,
+  },
+  mealModalIngredientRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 6,
+  },
+  mealModalIngredientName: {
+    fontSize: 14,
+    color: "rgba(255,255,255,0.9)",
+  },
+  mealModalIngredientAmount: {
+    fontSize: 14,
+    color: "rgba(255,255,255,0.7)",
+  },
+  mealModalNoIngredients: {
+    fontSize: 13,
+    color: "rgba(255,255,255,0.6)",
+    marginBottom: 18,
+  },
+  mealModalCloseButton: {
+    marginTop: 4,
+    alignSelf: "center",
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 999,
+    backgroundColor: "rgba(255,255,255,0.1)",
+  },
+  mealModalCloseText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "rgba(255,255,255,0.9)",
+  },
+  regenInfoText: {
+    marginTop: 6,
+    fontSize: 12,
+    color: "rgba(255,255,255,0.6)",
+  },
 });
 
 export default TuDiaScreen;

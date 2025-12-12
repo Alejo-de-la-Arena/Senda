@@ -21,13 +21,13 @@ const aiSchema = z.object({
                 title: z.string(),
                 time: z.string(),
                 kcal: z.number(),
-                // Nuevo: ingredientes con cantidades
+                // ingredientes con cantidades (para el modal de detalle)
                 ingredients: z
                     .array(
                         z.object({
                             name: z.string(),
                             amount: z.number(),
-                            unit: z.string(),
+                            unit: z.string(), // "g" | "ml" | "unidad" | "cda" | "cdta"
                         })
                     )
                     .optional(),
@@ -122,17 +122,16 @@ function describePrefs(dietary_prefs = {}, allergies = []) {
     return `${prefsText}. Alergias: ${allergiesText}.`;
 }
 
+// Mifflin-St Jeor simplificado + ajuste por objetivo
 function estimateTargetKcal(userRow) {
     const age = calcAgeFromBirthdate(userRow.birthdate) ?? 30;
     const weight = userRow.weight_kg ?? 70;
     const height = userRow.height_cm ?? 170;
 
-    // Mifflin-St Jeor muy simple
     let bmr;
     if (userRow.sex === "female") {
         bmr = 10 * weight + 6.25 * height - 5 * age - 161;
     } else {
-        // default male / other
         bmr = 10 * weight + 6.25 * height - 5 * age + 5;
     }
 
@@ -177,7 +176,7 @@ function estimateTargetKcal(userRow) {
             break;
     }
 
-    return tdee * goalFactor;
+    return Math.round(tdee * goalFactor);
 }
 
 function buildUserContext(userRow) {
@@ -190,8 +189,8 @@ Perfil del usuario:
 - Sexo: ${userRow.sex || "no especificado"}
 - Altura: ${userRow.height_cm || "?"} cm
 - Peso: ${userRow.weight_kg || "?"} kg
-- Nivel de actividad: ${userRow.activity_level || "no especificado"}
-- Objetivo principal: ${userRow.primary_goal || "no especificado"}
+- Nivel de actividad: ${describeActivity(userRow.activity_level)}
+- Objetivo principal: ${describeGoal(userRow.primary_goal)}
 
 Preferencias alimentarias:
 - Keto: ${prefs.keto ? "sí" : "no"}
@@ -205,21 +204,6 @@ Alergias o restricciones adicionales:
             : "ninguna registrada"
         }
 `.trim();
-}
-
-
-// Pequeña ayuda para aproximar kcal objetivo
-function estimateTargetKcal(user) {
-    const w = user.weight_kg || 80;
-
-    switch (user.primary_goal) {
-        case "fat_loss":
-            return Math.round(w * 28);
-        case "muscle_gain":
-            return Math.round(w * 38);
-        default:
-            return Math.round(w * 33); // mantenimiento
-    }
 }
 
 function buildDietPrompt(userRow) {
@@ -300,6 +284,34 @@ router.post("/:id/diet/refresh", async (req, res) => {
 
     const sb = supabaseAdmin();
 
+    // 0) Config del límite diario (por usuario)
+    const MAX_REGEN_PER_DAY = 3;
+    const today = new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
+
+    const { data: existingPlan, error: eExisting } = await sb
+        .from("DietPlan")
+        .select("id, regen_count, regen_date")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+    if (eExisting) {
+        console.error("[diet] Error leyendo DietPlan existente:", eExisting);
+        return res.status(400).json({ error: eExisting.message });
+    }
+
+    let regenCountToday = 0;
+    if (existingPlan && existingPlan.regen_date === today) {
+        regenCountToday = existingPlan.regen_count || 0;
+        if (regenCountToday >= MAX_REGEN_PER_DAY) {
+            return res.status(429).json({
+                error: "Max daily regenerations reached",
+                remaining_regens: 0,
+                max_regens: MAX_REGEN_PER_DAY,
+            });
+        }
+    }
+    const newRegenCount = regenCountToday + 1;
+
     // 1) Traer el usuario desde nuestra tabla User
     const { data: userRow, error: eUser } = await sb
         .from("User")
@@ -379,13 +391,18 @@ router.post("/:id/diet/refresh", async (req, res) => {
             updated_at: new Date().toISOString(),
         });
 
-        // 4) Guardar en DietPlan
+        // 4) Guardar en DietPlan con upsert por user_id y contador de regeneraciones
         const { data: saved, error: eSave } = await sb
             .from("DietPlan")
-            .upsert({
-                user_id: userId,
-                ...aiData,
-            })
+            .upsert(
+                {
+                    user_id: userId,
+                    ...aiData,
+                    regen_count: newRegenCount,
+                    regen_date: today,
+                },
+                { onConflict: "user_id" }
+            )
             .select()
             .single();
 
@@ -394,14 +411,17 @@ router.post("/:id/diet/refresh", async (req, res) => {
             return res.status(400).json({ error: eSave.message });
         }
 
-        return res.json(saved);
+        return res.json({
+            ...saved,
+            remaining_regens: Math.max(MAX_REGEN_PER_DAY - newRegenCount, 0),
+            max_regens: MAX_REGEN_PER_DAY,
+        });
     } catch (err) {
         console.error("[diet] Error llamando a OpenAI o procesando respuesta:", err);
         return res
             .status(500)
             .json({ error: "Failed to generate diet plan with AI" });
     }
-
 });
 
 module.exports = router;
