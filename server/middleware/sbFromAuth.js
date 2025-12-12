@@ -2,6 +2,7 @@
 const { createClient } = require("@supabase/supabase-js");
 
 function sbFromAuth(req, res, next) {
+
   try {
     const auth = req.headers.authorization || "";
     const token = auth.startsWith("Bearer ") ? auth.slice(7) : null;

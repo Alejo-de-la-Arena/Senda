@@ -248,4 +248,143 @@ router.patch(
   }
 );
 
+/**
+ * GET /users/me/training
+ * Devuelve el programa ACTIVO asignado al usuario autenticado
+ * - Si no tiene programa activo -> { hasProgram: false }
+ * - Si tiene -> { hasProgram: true, program, workouts[] con ejercicios }
+ * Mismo shape que /trainer/users/:userId/training
+ */
+router.get("/me/training", sbFromAuth, async (req, res) => {
+  const sb = req.sb;
+
+  try {
+    // 1) obtener el user del token
+    const { data: u, error: e0 } = await sb.auth.getUser();
+
+    if (e0 || !u?.user) {
+      return res.status(401).json({ error: "Invalid token" });
+    }
+
+    // 2) buscar su fila en "User" para obtener el id numérico
+    const { data: userRow, error: userError } = await sb
+      .from("User")
+      .select("id")
+      .eq("auth_uid", u.user.id)
+      .single();
+
+    if (userError || !userRow) {
+      console.error("Error buscando User para auth_uid", {
+        auth_uid: u.user.id,
+        userError,
+      });
+      return res.status(404).json({ error: "Usuario de app no encontrado" });
+    }
+
+    const userId = userRow.id;
+
+    // 3) Buscar programa activo del usuario (MISMA LÓGICA QUE TRAINER)
+    const { data: assignments, error: assError } = await sb
+      .from("UserProgramAssignment")
+      .select("id, program_id, status, start_date")
+      .eq("user_id", userId)
+      .eq("status", "active")
+      .order("start_date", { ascending: false })
+      .limit(1);
+
+    if (assError) {
+      console.error("Error buscando UserProgramAssignment", assError);
+      return res
+        .status(500)
+        .json({ error: "Error interno buscando el programa asignado." });
+    }
+
+    if (!assignments || assignments.length === 0) {
+      return res.json({ hasProgram: false });
+    }
+
+    const assignment = assignments[0];
+    const programId = assignment.program_id;
+
+    // 4) Info del programa
+    const { data: program, error: programError } = await sb
+      .from("TrainingProgram")
+      .select("id, title, goal, level, duration_weeks")
+      .eq("id", programId)
+      .single();
+
+    if (programError || !program) {
+      console.error("Error buscando TrainingProgram", programError);
+      return res
+        .status(500)
+        .json({ error: "No se encontró información del programa." });
+    }
+
+    // 5) Workouts + ejercicios (MISMA QUERY QUE EN TRAINER)
+    const { data: workoutsRaw, error: workoutsError } = await sb
+      .from("Workout")
+      .select(
+        `
+        id,
+        day_number,
+        title,
+        notes,
+        WorkoutExercise (
+          id,
+          exercise_id,
+          sequence_order,
+          sets,
+          reps,
+          rest_sec,
+          Exercise (
+            id,
+            name
+          )
+        )
+      `
+      )
+      .eq("program_id", programId)
+      .order("day_number", { ascending: true });
+
+    if (workoutsError) {
+      console.error("Error buscando Workouts", workoutsError);
+      return res
+        .status(500)
+        .json({ error: "Error cargando los días de entrenamiento." });
+    }
+
+    // 6) Mapear y ordenar ejercicios por sequence_order en JS
+    const workouts = (workoutsRaw || []).map((w) => {
+      const exercisesSorted = (w.WorkoutExercise || []).slice().sort((a, b) => {
+        const sa = a.sequence_order ?? 0;
+        const sb = b.sequence_order ?? 0;
+        return sa - sb;
+      });
+
+      return {
+        id: w.id,
+        day_number: w.day_number,
+        title: w.title,
+        notes: w.notes,
+        exercises: exercisesSorted.map((we) => ({
+          id: we.id,
+          name: we.Exercise?.name || "Ejercicio sin nombre",
+          sets: we.sets,
+          reps: we.reps,
+          rest_sec: we.rest_sec,
+        })),
+      };
+    });
+
+    return res.json({
+      hasProgram: true,
+      program,
+      workouts,
+    });
+  } catch (err) {
+    console.error("Error en GET /users/me/training", err);
+    return res.status(500).json({ error: "Error interno del servidor." });
+  }
+});
+
 module.exports = router;

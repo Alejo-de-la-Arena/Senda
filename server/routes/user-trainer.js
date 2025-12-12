@@ -1,6 +1,8 @@
 const router = require("express").Router();
 const { validate, z } = require("../middleware/validate");
 const { sbFromAuth } = require("../middleware/sbFromAuth");
+const { supabaseAdmin } = require("../lib/supabase");
+const { authRequired } = require("../middleware/auth"); // mismo que usás en otros routers
 
 // POST /user-trainer  -> vincula usuario logueado con un TrainerProfile
 router.post(
@@ -25,11 +27,6 @@ router.post(
 
       const authUid = u.user.id; // uuid de Supabase Auth
 
-      console.log("[user-trainer] solicitud de conexión", {
-        authUid,
-        trainer_profile_id,
-      });
-
       // 1) Buscar el User.id interno (int4) a partir del auth_uid
       const { data: userRow, error: uErr } = await sb
         .from("User")
@@ -45,7 +42,6 @@ router.post(
       }
 
       const userId = userRow.id;
-      console.log("[user-trainer] userId interno", userId);
 
       // 2) ¿ya existe el vínculo?
       const { data: existing, error: e1 } = await sb
@@ -63,14 +59,11 @@ router.post(
       }
 
       if (existing) {
-        console.log("[user-trainer] ya estaba vinculado");
-        return res
-          .status(200)
-          .json({
-            ok: true,
-            alreadyLinked: true,
-            message: "Ya estabas conectado con este entrenador.",
-          });
+        return res.status(200).json({
+          ok: true,
+          alreadyLinked: true,
+          message: "Ya estabas conectado con este entrenador.",
+        });
       }
 
       // 3) Crear vínculo
@@ -87,8 +80,6 @@ router.post(
           .status(500)
           .json({ error: "No se pudo conectar con el entrenador." });
       }
-
-      console.log("[user-trainer] vínculo creado OK");
       return res.status(201).json({
         ok: true,
         alreadyLinked: false,
@@ -102,5 +93,90 @@ router.post(
     }
   }
 );
+
+// GET /user-trainer/my-users
+// Devuelve los usuarios "entrenados" del trainer logueado
+router.get("/my-users", authRequired, async (req, res) => {
+  const sb = supabaseAdmin();
+  const authUid = req.user.id; // viene del token (igual que en /trainers)
+
+  try {
+    // 1) Buscar el User interno por auth_uid
+    const { data: userRow, error: eUser } = await sb
+      .from("User")
+      .select("id, role")
+      .eq("auth_uid", authUid)
+      .maybeSingle();
+
+    if (eUser) {
+      console.error("[user-trainer/my-users] error buscando User", eUser);
+      return res
+        .status(500)
+        .json({ error: "Error obteniendo tu usuario interno." });
+    }
+
+    if (!userRow) {
+      console.warn("[user-trainer/my-users] User no encontrado", authUid);
+      return res.status(404).json({ error: "Usuario no encontrado." });
+    }
+
+    if (userRow.role !== "trainer") {
+      // Por si un usuario normal intenta pegarle
+      return res.status(403).json({
+        error: "Solo los entrenadores pueden ver sus entrenados.",
+      });
+    }
+
+    // 2) Buscar el TrainerProfile de este user
+    const { data: trainerProfile, error: eTrainer } = await sb
+      .from("TrainerProfile")
+      .select("id")
+      .eq("user_id", userRow.id)
+      .maybeSingle();
+
+    if (eTrainer) {
+      console.error(
+        "[user-trainer/my-users] error buscando TrainerProfile",
+        eTrainer
+      );
+      return res
+        .status(500)
+        .json({ error: "Error obteniendo tu perfil de entrenador." });
+    }
+
+    if (!trainerProfile) {
+      console.warn(
+        "[user-trainer/my-users] TrainerProfile no encontrado para user_id",
+        userRow.id
+      );
+      return res
+        .status(404)
+        .json({ error: "No encontramos tu perfil de entrenador." });
+    }
+
+    const trainerId = trainerProfile.id; // 👈 AHORA SÍ: ESTE ES EL QUE USA UserTrainerWithUser
+
+    // 3) Traer entrenados desde la view
+    const { data, error } = await sb
+      .from("UserTrainerWithUser")
+      .select("*")
+      .eq("trainer_id", trainerId)
+      .eq("status", "active"); // si querés solo activos
+
+    if (error) {
+      console.error("[user-trainer/my-users] error listando entrenados", error);
+      return res
+        .status(500)
+        .json({ error: "No pudimos cargar tus entrenados." });
+    }
+    return res.json(data || []);
+  } catch (err) {
+    console.error("[user-trainer/my-users] error inesperado", err);
+    return res
+      .status(500)
+      .json({ error: "Error interno cargando tus entrenados." });
+  }
+});
+
 
 module.exports = router;

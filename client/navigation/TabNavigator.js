@@ -1,14 +1,14 @@
-import React from 'react';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Ionicons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
-import { StyleSheet, View, Text } from 'react-native';
-import { colors, typography, spacing } from '../styles/theme';
+import React from "react";
+import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { Ionicons } from "@expo/vector-icons";
+import { BlurView } from "expo-blur";
+import { StyleSheet, View, Text } from "react-native";
+import { colors, typography, spacing } from "../styles/theme";
 
-import TuDiaScreen from '../screens/TuDiaScreen';
-import ComunidadScreen from '../screens/ComunidadScreen';
-import ChatScreen from '../screens/ChatScreen';
-import ProfileScreen from '../screens/ProfileScreen';
+import TuDiaScreen from "../screens/tuDiaScreens/TuDiaScreen";
+import ComunidadScreen from "../screens/ComunidadScreen";
+import ChatScreen from "../screens/ChatScreen";
+import ProfileScreen from "../screens/ProfileScreen";
 
 const Tab = createBottomTabNavigator();
 
@@ -23,18 +23,18 @@ function TabNavigator() {
           let showBadge = false;
           let badgeCount = 0;
 
-          if (route.name === 'Comunidad') {
-            iconName = focused ? 'people' : 'people-outline';
+          if (route.name === "Comunidad") {
+            iconName = focused ? "people" : "people-outline";
             showBadge = true;
             badgeCount = 3; // Número de notificaciones simuladas
-          } else if (route.name === 'Tu Día') {
-            iconName = focused ? 'sunny' : 'sunny-outline';
-          } else if (route.name === 'Chat') {
-            iconName = focused ? 'chatbubbles' : 'chatbubbles-outline';
+          } else if (route.name === "Tu Día") {
+            iconName = focused ? "sunny" : "sunny-outline";
+          } else if (route.name === "Chat") {
+            iconName = focused ? "chatbubbles" : "chatbubbles-outline";
             showBadge = true;
             badgeCount = 5; // Mensajes no leídos simulados
-          } else if (route.name === 'Perfil') {
-            iconName = focused ? 'person' : 'person-outline';
+          } else if (route.name === "Perfil") {
+            iconName = focused ? "person" : "person-outline";
           }
 
           return (
@@ -43,7 +43,7 @@ function TabNavigator() {
               {showBadge && badgeCount > 0 && (
                 <View style={styles.badge}>
                   <Text style={styles.badgeText}>
-                    {badgeCount > 9 ? '9+' : badgeCount}
+                    {badgeCount > 9 ? "9+" : badgeCount}
                   </Text>
                 </View>
               )}
@@ -53,25 +53,25 @@ function TabNavigator() {
         tabBarActiveTintColor: colors.textoPrincipal,
         tabBarInactiveTintColor: colors.textoSecundario,
         tabBarStyle: {
-          position: 'absolute',
-          backgroundColor: colors.fondoBaseOscuro + 'E6', // 90% opacity
+          position: "absolute",
+          backgroundColor: colors.fondoBaseOscuro + "E6", // 90% opacity
           borderTopWidth: 0,
           elevation: 0,
           height: 90,
           paddingBottom: 30,
           paddingTop: 10,
-          borderTopColor: 'transparent',
+          borderTopColor: "transparent",
         },
         tabBarBackground: () => (
-          <BlurView 
-            intensity={80} 
+          <BlurView
+            intensity={80}
             style={StyleSheet.absoluteFillObject}
             tint="dark"
           />
         ),
         tabBarLabelStyle: {
           fontSize: 11,
-          fontWeight: '600',
+          fontWeight: "600",
           marginTop: 4,
         },
       })}
@@ -86,18 +86,18 @@ function TabNavigator() {
 
 const styles = StyleSheet.create({
   iconContainer: {
-    position: 'relative',
+    position: "relative",
   },
   badge: {
-    position: 'absolute',
+    position: "absolute",
     right: -8,
     top: -4,
     backgroundColor: colors.naranjaCTA,
     borderRadius: 10,
     minWidth: 18,
     height: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: "center",
+    alignItems: "center",
     paddingHorizontal: 4,
   },
   badgeText: {

@@ -19,11 +19,26 @@ import {
   shadows,
 } from "../styles/theme";
 import ProfesionalesScreen from "./Profesionales/Profesionales";
+import EntrenadosScreen from "./verEntrenados/EntrenadosScreen";
+import { useEffect } from "react";
+import { getMe } from "../api/user";
 
 const { width } = Dimensions.get("window");
 
 const ComunidadScreen = () => {
   const [activeTab, setActiveTab] = useState("actividad");
+  const [profile, setProfile] = useState(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const me = await getMe();        
+        setProfile(me);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
 
   // Datos de actividades completadas
   const actividadPosts = [
@@ -567,22 +582,43 @@ const ComunidadScreen = () => {
                 Explora
               </Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.tab,
-                activeTab === "Profesionales" && styles.activeTab,
-              ]}
-              onPress={() => setActiveTab("Profesionales")}
-            >
-              <Text
+            {profile?.role === "trainer" ? (
+              <TouchableOpacity
                 style={[
-                  styles.tabText,
-                  activeTab === "Profesionales" && styles.activeTabText,
+                  styles.tab,
+                  activeTab === "Entrenados" && styles.activeTab,
                 ]}
+                onPress={() => setActiveTab("Entrenados")}
               >
-                Profesionales
-              </Text>
-            </TouchableOpacity>
+                <Text
+                  style={[
+                    styles.tabText,
+                    activeTab === "Entrenados" && styles.activeTabText,
+                  ]}
+                >
+                  Entrenados
+                </Text>
+              </TouchableOpacity>
+            ) : profile?.role === "user" ? (
+              <TouchableOpacity
+                style={[
+                  styles.tab,
+                  activeTab === "Profesionales" && styles.activeTab,
+                ]}
+                onPress={() => setActiveTab("Profesionales")}
+              >
+                <Text
+                  style={[
+                    styles.tabText,
+                    activeTab === "Profesionales" && styles.activeTabText,
+                  ]}
+                >
+                  Profesionales
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              ""
+            )}
           </View>
           {/*           <TouchableOpacity style={styles.notificationButton}>
             <Ionicons
@@ -600,6 +636,7 @@ const ComunidadScreen = () => {
           {activeTab === "unete" && renderUnete()}
           {activeTab === "explora" && renderExplora()}
           {activeTab === "Profesionales" && <ProfesionalesScreen />}
+          {activeTab === "Entrenados" && <EntrenadosScreen />}
         </View>
       </SafeAreaView>
     </LinearGradient>

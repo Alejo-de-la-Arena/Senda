@@ -114,7 +114,6 @@ const ProfileScreen = () => {
         });
 
       if (uploadError) {
-        console.log("[avatar] upload error", uploadError);
         throw new Error("No pudimos subir tu foto. Probá de nuevo.");
       }
 
@@ -131,7 +130,6 @@ const ProfileScreen = () => {
         avatar_url: publicUrl,
       }));
     } catch (err) {
-      console.log("[avatar] ERROR:", err);
       Alert.alert(
         "Ups...",
         err?.message || "No pudimos actualizar tu foto de perfil."

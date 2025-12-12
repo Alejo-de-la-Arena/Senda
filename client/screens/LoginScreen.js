@@ -108,7 +108,6 @@ export default function LoginScreen({ navigation }) {
           "Credenciales inválidas. Revisá tu email y contraseña."
         );
       } else {
-        console.log(err);
         setErrorMessage(apiMsg || "Error desconocido. Intentá de nuevo.");
       }
     } finally {

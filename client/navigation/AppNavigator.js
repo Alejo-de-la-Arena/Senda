@@ -8,6 +8,11 @@ import LoginScreen from "../screens/LoginScreen";
 import RegisterScreen from "../screens/registers/RegisterScreen";
 import { colors } from "../styles/theme";
 import { useAuth } from "../auth/AuthProvider";
+import TrainerUserTrainingScreen from "../screens/Profesionales/Entrenamientos/VerEntrenamientos";
+import TrainerConfigureTrainingScreen from "../screens/Profesionales/Entrenamientos/TrainerConfigureTrainingScreen";
+import UserWorkoutTodayScreen from "../screens/UserViews/UserWorkoutTodayScreen";
+import AIWorkoutQuestionnaireScreen from "../screens/UserViews/IA_views/AIWorkoutQuestionnaireScreen";
+import AIWorkoutPreviewScreen from "../screens/UserViews/IA_views/AIWorkoutPreviewScreen";
 
 import BreatheSetupScreen from "../screens/BreatheSetupScreen";
 
@@ -39,6 +44,28 @@ export default function AppNavigator() {
 
           <Stack.Screen name="BoxBreathing" component={BoxBreathingScreen} />
           <Stack.Screen name="SendaAIChat" component={SendaAIChatScreen} />
+          <Stack.Screen
+            name="TrainerUserTraining"
+            component={TrainerUserTrainingScreen}
+          />
+          <Stack.Screen
+            name="TrainerConfigureTraining"
+            component={TrainerConfigureTrainingScreen}
+          />
+          <Stack.Screen
+            name="UserWorkoutToday"
+            component={UserWorkoutTodayScreen}
+          />
+          <Stack.Screen
+            name="AIWorkoutQuestionnaire"
+            component={AIWorkoutQuestionnaireScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="AIWorkoutPreview"
+            component={AIWorkoutPreviewScreen}
+            options={{ headerShown: false }}
+          />
         </>
       )}
     </Stack.Navigator>

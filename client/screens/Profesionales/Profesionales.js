@@ -68,7 +68,6 @@ function TrainerCard({ trainer }) {
         );
       }
     } catch (e) {
-      console.log("Error conectando con trainer", e?.response?.data || e);
       Alert.alert(
         "Ups...",
         e?.response?.data?.error ||

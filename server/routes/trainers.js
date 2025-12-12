@@ -76,7 +76,6 @@ router.get("/", requireAuth, async (req, res) => {
     }
 
     const currentUserId = userRow.id;
-    console.log("[trainers] currentUserId:", currentUserId);
 
     // 2) Base query de trainers (lo que ya tenías)
     let trainerQuery = sb.from("TrainerProfileWithUser").select("*");

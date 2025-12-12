@@ -21,10 +21,9 @@ app.use('/users', require('./routes/nutrition'));
 app.use('/users', require('./routes/diet'));
 app.use('/trainers', require('./routes/trainers'));
 app.use('/user-trainer', require('./routes/user-trainer'));
-app.use('/', require('./routes/program'));
+app.use('/program', require('./routes/program'));
 app.use('/', require('./routes/assignment'));
 app.use('/', require('./routes/logs'));
-
 app.use('/ai', require('./routes/ai'));
 
 app.get('/health', (_req, res) => res.json({ ok: true, ts: Date.now() }));

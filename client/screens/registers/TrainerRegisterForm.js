@@ -21,7 +21,11 @@ export default function TrainerRegisterForm({ navigation }) {
   const [isVisible, setIsVisible] = useState(true);
   const [phone, setPhone] = useState("");
   const [bio, setBio] = useState("");
-  const [specialties, setSpecialties] = useState("");
+
+  // Especialidades como tags
+  const [specialties, setSpecialties] = useState([]); // string[]
+  const [specialtyInput, setSpecialtyInput] = useState("");
+
   const [instagram, setInstagram] = useState("");
   const [youtube, setYoutube] = useState("");
   const [tiktok, setTiktok] = useState("");
@@ -54,6 +58,21 @@ export default function TrainerRegisterForm({ navigation }) {
   const markAllTouched = () =>
     setTouched({ name: true, email: true, password: true, bio: true });
 
+  const handleAddSpecialty = () => {
+    const value = specialtyInput.trim();
+    if (!value) return;
+    if (specialties.includes(value)) {
+      setSpecialtyInput("");
+      return;
+    }
+    setSpecialties((prev) => [...prev, value]);
+    setSpecialtyInput("");
+  };
+
+  const handleRemoveSpecialty = (value) => {
+    setSpecialties((prev) => prev.filter((s) => s !== value));
+  };
+
   const onSubmit = async () => {
     markAllTouched();
     if (hasAnyError) return;
@@ -75,10 +94,7 @@ export default function TrainerRegisterForm({ navigation }) {
 
         trainer_profile: {
           bio: bio.trim(),
-          specialties: specialties
-            .split(",")
-            .map((s) => s.trim())
-            .filter(Boolean),
+          specialties, // ahora ya es array de strings
           social_links: {
             instagram: instagram.trim() || "",
             youtube: youtube.trim() || "",
@@ -87,11 +103,7 @@ export default function TrainerRegisterForm({ navigation }) {
         },
       };
 
-      const result = await signup(payload);
-      console.log("Trainer user creado:", result);
-
-      // 2) (opcional) después vamos a llamar a /trainers con bio, specialties, social_links
-
+      await signup(payload);
       Alert.alert(
         "Cuenta creada",
         "Tu cuenta de entrenador fue creada con éxito ✨"
@@ -218,14 +230,40 @@ export default function TrainerRegisterForm({ navigation }) {
         <Text style={styles.errorText}>La bio es obligatoria.</Text>
       )}
 
-      <Text style={styles.label}>Especialidades (separadas por coma)</Text>
-      <TextInput
-        value={specialties}
-        onChangeText={setSpecialties}
-        placeholder="Hipertrofia, Crossfit, Running"
-        placeholderTextColor="#ffffff88"
-        style={styles.input}
-      />
+      {/* Especialidades como tags */}
+      <Text style={styles.label}>Especialidades</Text>
+      <View style={styles.specialtyRow}>
+        <TextInput
+          value={specialtyInput}
+          onChangeText={setSpecialtyInput}
+          placeholder="Hipertrofia, Crossfit, Running..."
+          placeholderTextColor="#ffffff88"
+          style={[styles.input, { flex: 1, marginBottom: 0 }]}
+        />
+        <TouchableOpacity
+          style={styles.addTagButton}
+          onPress={handleAddSpecialty}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="add" size={20} color="#1E1E1E" />
+        </TouchableOpacity>
+      </View>
+
+      {specialties.length > 0 && (
+        <View style={styles.tagsContainer}>
+          {specialties.map((item) => (
+            <View key={item} style={styles.tag}>
+              <Text style={styles.tagText}>{item}</Text>
+              <TouchableOpacity
+                onPress={() => handleRemoveSpecialty(item)}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+              >
+                <Ionicons name="close" size={14} color="#1E1E1E" />
+              </TouchableOpacity>
+            </View>
+          ))}
+        </View>
+      )}
 
       <Text style={styles.label}>Instagram</Text>
       <TextInput
@@ -286,4 +324,39 @@ const styles = StyleSheet.create({
   multiline: { height: 100, textAlignVertical: "top" },
   inputError: { borderColor: "#FF6B6B" },
   errorText: { color: "#FFB3B3", fontSize: 12, marginBottom: 2 },
+
+  specialtyRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 6,
+  },
+  addTagButton: {
+    height: 48,
+    width: 48,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.naranjaCTA,
+  },
+  tagsContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginBottom: 4,
+  },
+  tag: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "#fff",
+  },
+  tagText: {
+    color: "#1E1E1E",
+    fontSize: 12,
+    marginRight: 6,
+    fontWeight: "600",
+  },
 });

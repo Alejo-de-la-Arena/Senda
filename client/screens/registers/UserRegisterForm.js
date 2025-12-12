@@ -7,8 +7,10 @@ import {
   Switch,
   Alert,
   StyleSheet,
+  Platform,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { signup } from "../../api/auth";
 import {
   components,
@@ -34,6 +36,14 @@ const GOAL_OPTIONS = [
   "Rendimiento",
 ];
 
+function formatDate(date) {
+  if (!date) return "";
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export function UserRegisterForm({ navigation }) {
   // Campos básicos (requeridos)
   const [name, setName] = useState("");
@@ -44,7 +54,8 @@ export function UserRegisterForm({ navigation }) {
 
   // Campos de perfil
   const [phone, setPhone] = useState("");
-  const [birthdate, setBirthdate] = useState("");
+  const [birthdate, setBirthdate] = useState(null); // Date | null
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [sex, setSex] = useState(null);
   const [heightCm, setHeightCm] = useState("");
   const [weightKg, setWeightKg] = useState("");
@@ -58,8 +69,9 @@ export function UserRegisterForm({ navigation }) {
   const [dietGlutenFree, setDietGlutenFree] = useState(false);
   const [dietDairyFree, setDietDairyFree] = useState(false);
 
-  // Alergias
-  const [allergies, setAllergies] = useState("");
+  // Alergias como lista de tags
+  const [allergies, setAllergies] = useState([]); // string[]
+  const [allergyInput, setAllergyInput] = useState("");
 
   const [touched, setTouched] = useState({});
   const [submitting, setSubmitting] = useState(false);
@@ -69,9 +81,6 @@ export function UserRegisterForm({ navigation }) {
     const e = email.trim();
     const p = password;
     const n = name.trim();
-
-    const birth = birthdate.trim();
-    const birthInvalid = birth.length > 0 && !/^\d{4}-\d{2}-\d{2}$/.test(birth);
 
     const h = Number(heightCm);
     const w = Number(weightKg);
@@ -86,7 +95,6 @@ export function UserRegisterForm({ navigation }) {
       invalidEmail: e.length > 0 && !EMAIL_REGEX.test(e),
       emptyPassword: p.length === 0,
       shortPassword: p.length > 0 && p.length < 8,
-      birthInvalid,
       heightInvalid,
       weightInvalid,
       sexMissing: sex === null,
@@ -97,7 +105,6 @@ export function UserRegisterForm({ navigation }) {
     name,
     email,
     password,
-    birthdate,
     heightCm,
     weightKg,
     sex,
@@ -111,7 +118,6 @@ export function UserRegisterForm({ navigation }) {
     errors.invalidEmail ||
     errors.emptyPassword ||
     errors.shortPassword ||
-    errors.birthInvalid ||
     errors.heightInvalid ||
     errors.weightInvalid ||
     errors.sexMissing ||
@@ -131,6 +137,32 @@ export function UserRegisterForm({ navigation }) {
       goal: true,
     });
 
+  const handleAddAllergy = () => {
+    const value = allergyInput.trim();
+    if (!value) return;
+    if (allergies.includes(value)) {
+      setAllergyInput("");
+      return;
+    }
+    setAllergies((prev) => [...prev, value]);
+    setAllergyInput("");
+  };
+
+  const handleRemoveAllergy = (value) => {
+    setAllergies((prev) => prev.filter((a) => a !== value));
+  };
+
+  const handleDateChange = (event, selectedDate) => {
+    if (Platform.OS === "android") {
+      setShowDatePicker(false);
+      if (event?.type !== "set") return;
+      if (selectedDate) setBirthdate(selectedDate);
+    } else {
+      // iOS: se muestra inline o en modal según config
+      if (selectedDate) setBirthdate(selectedDate);
+    }
+  };
+
   const onSubmit = async () => {
     markAllTouched();
     if (hasAnyError) return;
@@ -144,7 +176,7 @@ export function UserRegisterForm({ navigation }) {
         password,
         role: "user",
         phone: phone.trim() || null,
-        birthdate: birthdate.trim() || null,
+        birthdate: birthdate ? formatDate(birthdate) : null, // YYYY-MM-DD desde Date
         sex,
         height_cm: heightCm === "" ? null : Number(heightCm),
         weight_kg: weightKg === "" ? null : Number(weightKg),
@@ -156,14 +188,10 @@ export function UserRegisterForm({ navigation }) {
           gluten_free: dietGlutenFree,
           dairy_free: dietDairyFree,
         },
-        allergies: allergies
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean),
+        allergies, // ya es array de strings
       };
 
-      const result = await signup(payload);
-      console.log("Usuario creado:", result);
+      await signup(payload);
       Alert.alert("Cuenta creada", "Tu cuenta fue creada con éxito ✨");
       navigation.replace("Login");
     } catch (e) {
@@ -272,20 +300,41 @@ export function UserRegisterForm({ navigation }) {
         style={styles.input}
       />
 
-      <Text style={styles.label}>Fecha de nacimiento (YYYY-MM-DD)</Text>
-      <TextInput
-        value={birthdate}
-        onChangeText={setBirthdate}
-        onBlur={() => setTouched((t) => ({ ...t, birthdate: true }))}
-        placeholder="2000-05-14"
-        placeholderTextColor="#ffffff88"
-        style={[
-          styles.input,
-          touched.birthdate && errors.birthInvalid && styles.inputError,
-        ]}
-      />
-      {touched.birthdate && errors.birthInvalid && (
-        <Text style={styles.errorText}>Usá el formato YYYY-MM-DD.</Text>
+      {/* Fecha de nacimiento con datepicker */}
+      <Text style={styles.label}>Fecha de nacimiento</Text>
+      <TouchableOpacity
+        onPress={() => {
+          setTouched((t) => ({ ...t, birthdate: true }));
+          setShowDatePicker(true);
+        }}
+        style={[styles.input, styles.dateInput]}
+        activeOpacity={0.8}
+      >
+        <Text
+          style={{
+            color: birthdate ? colors.textoPrincipal : "#ffffff88",
+          }}
+        >
+          {birthdate ? formatDate(birthdate) : "Seleccionar fecha"}
+        </Text>
+        <Ionicons
+          name="calendar-outline"
+          size={18}
+          color="#ffffffaa"
+          style={{ position: "absolute", right: 12 }}
+        />
+      </TouchableOpacity>
+
+      {showDatePicker && (
+        <DateTimePicker
+          value={
+            birthdate || new Date(new Date().getFullYear() - 20, 0, 1) // por defecto 20 años atrás
+          }
+          mode="date"
+          display={Platform.OS === "ios" ? "spinner" : "default"}
+          onChange={handleDateChange}
+          maximumDate={new Date()}
+        />
       )}
 
       <Text style={styles.label}>Sexo *</Text>
@@ -414,15 +463,40 @@ export function UserRegisterForm({ navigation }) {
         <Switch value={dietDairyFree} onValueChange={setDietDairyFree} />
       </View>
 
-      {/* ====== Alergias ====== */}
-      <Text style={styles.label}>Alergias (separadas por coma)</Text>
-      <TextInput
-        value={allergies}
-        onChangeText={setAllergies}
-        placeholder="peanut, strawberry"
-        placeholderTextColor="#ffffff88"
-        style={styles.input}
-      />
+      {/* ====== Alergias con tags ====== */}
+      <Text style={styles.label}>Alergias</Text>
+      <View style={styles.allergyRow}>
+        <TextInput
+          value={allergyInput}
+          onChangeText={setAllergyInput}
+          placeholder="Ej: maní, gluten"
+          placeholderTextColor="#ffffff88"
+          style={[styles.input, { flex: 1, marginBottom: 0 }]}
+        />
+        <TouchableOpacity
+          style={styles.addTagButton}
+          onPress={handleAddAllergy}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="add" size={20} color="#1E1E1E" />
+        </TouchableOpacity>
+      </View>
+
+      {allergies.length > 0 && (
+        <View style={styles.tagsContainer}>
+          {allergies.map((item) => (
+            <View key={item} style={styles.tag}>
+              <Text style={styles.tagText}>{item}</Text>
+              <TouchableOpacity
+                onPress={() => handleRemoveAllergy(item)}
+                hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+              >
+                <Ionicons name="close" size={14} color="#1E1E1E" />
+              </TouchableOpacity>
+            </View>
+          ))}
+        </View>
+      )}
 
       {/* ====== Acción ====== */}
       <TouchableOpacity
@@ -493,6 +567,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.textoSecundario + "33",
   },
+  dateInput: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
   inputError: { borderColor: "#FF6B6B" },
   errorText: {
     color: "#FFB3B3",
@@ -538,6 +616,40 @@ const styles = StyleSheet.create({
   switchLabel: {
     color: "#fff",
     fontSize: 14,
+    fontWeight: "600",
+  },
+  allergyRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 6,
+  },
+  addTagButton: {
+    height: 48,
+    width: 48,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.naranjaCTA,
+  },
+  tagsContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    marginBottom: 4,
+  },
+  tag: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: "#fff",
+  },
+  tagText: {
+    color: "#1E1E1E",
+    fontSize: 12,
+    marginRight: 6,
     fontWeight: "600",
   },
 });
