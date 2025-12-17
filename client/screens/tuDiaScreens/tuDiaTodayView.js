@@ -11,6 +11,19 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import PillSwitcher from "../../components/PillSwitcher";
 
+const dayKeyToDayNumber = (dayKey) => {
+  const map = {
+    monday: 1,
+    tuesday: 2,
+    wednesday: 3,
+    thursday: 4,
+    friday: 5,
+    saturday: 6,
+    sunday: 7,
+  };
+  return map[dayKey] ?? null;
+};
+
 const TuDiaTodayView = ({
   navigation,
   todayPlan,
@@ -21,33 +34,45 @@ const TuDiaTodayView = ({
   supplements,
   toggleSupplement,
   openSupplementsModal,
-  training, // { hasProgram, program, workouts[] }
+
+  training, // viene de getMyTraining()
   trainingLoading,
   trainingError,
-  diet,
-  dietToday,
+
+  // ✅ dieta (nuevo flujo)
+  dietTodayPayload, // respuesta de GET/POST /diet?scope=today -> { day_plan, ... }
+  dietToday, // objeto procesado para UI (meals, totalCalories)
   dietLoading,
   dietError,
   regenLeft,
   regenMax,
-  onGenerateDiet,
+  onGenerateDiet, // función del padre
+
   onPressMeal,
+
+  // ✅ para sincronizar workout con el día del WeekStrip
+  selectedDayKey, // pasalo desde TuDiaScreen
 }) => {
   const hasProgram = !!training?.hasProgram;
 
-  // 👉 Definimos el "entrenamiento del día" en base a workouts
+  const hasDietToday =
+    !!dietTodayPayload?.day_plan || (!!dietToday && !!dietToday.meals);
+
+  // 👉 Entrenamiento del día según selectedDayKey
   let todayWorkout = null;
-  if (
-    hasProgram &&
-    Array.isArray(training?.workouts) &&
-    training.workouts.length > 0
-  ) {
-    const sorted = [...training.workouts].sort(
-      (a, b) => (a.day_number ?? 0) - (b.day_number ?? 0)
-    );
-    // Por ahora: tomamos el primer día del programa como "día de hoy"
-    todayWorkout = sorted[0];
+  if (hasProgram && Array.isArray(training?.workouts) && training.workouts.length > 0) {
+    const targetDayNumber = dayKeyToDayNumber(selectedDayKey);
+
+    if (targetDayNumber != null) {
+      todayWorkout =
+        training.workouts.find((w) => Number(w.day_number) === targetDayNumber) ||
+        null;
+    }
+
+    // fallback: si no hay match, no inventamos “el primero”
+    // (mejor mostrar que hoy no hay workout cargado para ese día)
   }
+
   return (
     <>
       {/* Tipo de día */}
@@ -55,22 +80,23 @@ const TuDiaTodayView = ({
         <View
           style={[
             styles.dayTypeIcon,
-            { backgroundColor: todayPlan.dayTypeColor + "20" },
+            { backgroundColor: (todayPlan?.dayTypeColor || "#fff") + "20" },
           ]}
         >
           <Ionicons
-            name={todayPlan.dayTypeIcon}
+            name={todayPlan?.dayTypeIcon || "calendar-outline"}
             size={24}
-            color={todayPlan.dayTypeColor}
+            color={todayPlan?.dayTypeColor || "rgba(255,255,255,0.8)"}
           />
         </View>
         <View style={styles.dayTypeInfo}>
-          <Text style={styles.dayTypeLabel}>{todayPlan.dayTypeLabel}</Text>
+          <Text style={styles.dayTypeLabel}>
+            {todayPlan?.dayTypeLabel || "Tu día"}
+          </Text>
           <Text style={styles.dayTypeSubtext}>
-            {todayPlan.isMealPrepDay && "Día de Meal Prep • "}
-            {todayPlan.isShoppingDay && "Día de Compras • "}
-            {todayPlan.totalCalories &&
-              `${todayPlan.totalCalories} kcal objetivo`}
+            {todayPlan?.isMealPrepDay && "Día de Meal Prep • "}
+            {todayPlan?.isShoppingDay && "Día de Compras • "}
+            {todayPlan?.totalCalories ? `${todayPlan.totalCalories} kcal objetivo` : ""}
           </Text>
         </View>
         <TouchableOpacity onPress={() => setViewMode("week")}>
@@ -83,7 +109,7 @@ const TuDiaTodayView = ({
       </View>
 
       {/* Shopping List Alert (si es día de compras) */}
-      {todayPlan.isShoppingDay && (
+      {todayPlan?.isShoppingDay && (
         <TouchableOpacity style={styles.shoppingAlert}>
           <LinearGradient
             colors={["#FFB347", "#FF8C42"]}
@@ -93,12 +119,10 @@ const TuDiaTodayView = ({
           >
             <Ionicons name="cart-outline" size={24} color="white" />
             <View style={styles.shoppingAlertContent}>
-              <Text style={styles.shoppingAlertTitle}>
-                Lista de Compras Lista
-              </Text>
+              <Text style={styles.shoppingAlertTitle}>Lista de Compras Lista</Text>
               <Text style={styles.shoppingAlertSubtext}>
-                {todayPlan.shoppingList?.filter((i) => !i.bought).length || 0}{" "}
-                items • {todayPlan.estimatedBudget || "$0"}
+                {todayPlan?.shoppingList?.filter((i) => !i.bought).length || 0} items •{" "}
+                {todayPlan?.estimatedBudget || "$0"}
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color="white" />
@@ -110,7 +134,7 @@ const TuDiaTodayView = ({
       <PillSwitcher selected={selectedRitual} onSelect={onSelectRitual} />
 
       {/* Breathe */}
-      {selectedRitual === "breathe" && todayPlan.breathing && (
+      {selectedRitual === "breathe" && todayPlan?.breathing && (
         <View style={styles.plannedCard}>
           <View style={styles.plannedHeader}>
             <Text style={styles.plannedTitle}>Breathe de hoy</Text>
@@ -130,12 +154,8 @@ const TuDiaTodayView = ({
             </View>
           </View>
           <View style={styles.plannedContent}>
-            <Text style={styles.plannedName}>
-              Sesión personalizada de respiración
-            </Text>
-            <Text style={styles.plannedDuration}>
-              Generada según tu estado de ánimo de hoy
-            </Text>
+            <Text style={styles.plannedName}>Sesión personalizada de respiración</Text>
+            <Text style={styles.plannedDuration}>Generada según tu estado de ánimo de hoy</Text>
           </View>
           <TouchableOpacity
             style={styles.startButton}
@@ -154,18 +174,14 @@ const TuDiaTodayView = ({
           {trainingLoading ? (
             <View style={styles.trainingEmptyCard}>
               <ActivityIndicator size="small" color="#fff" />
-              <Text style={styles.trainingEmptyTitle}>
-                Cargando tu entrenamiento...
-              </Text>
+              <Text style={styles.trainingEmptyTitle}>Cargando tu entrenamiento...</Text>
             </View>
           ) : trainingError ? (
             <View style={styles.trainingEmptyCard}>
-              <Text style={styles.trainingEmptyTitle}>
-                No pudimos cargar tu entrenamiento
-              </Text>
+              <Text style={styles.trainingEmptyTitle}>No pudimos cargar tu entrenamiento</Text>
               <Text style={styles.trainingEmptySubtitle}>{trainingError}</Text>
             </View>
-          ) : !hasProgram || !todayWorkout ? (
+          ) : !hasProgram ? (
             <View style={styles.trainingEmptyCard}>
               <Ionicons
                 name="barbell-outline"
@@ -182,48 +198,51 @@ const TuDiaTodayView = ({
 
               <TouchableOpacity
                 style={styles.aiButton}
-                onPress={() => {
-                  navigation.navigate("AIWorkoutQuestionnaire");
-                }}
+                onPress={() => navigation.navigate("AIWorkoutQuestionnaire")}
               >
                 <Ionicons name="sparkles-outline" size={18} color="#111" />
-                <Text style={styles.aiButtonText}>
-                  Generar entrenamiento con IA
-                </Text>
+                <Text style={styles.aiButtonText}>Generar entrenamiento con IA</Text>
               </TouchableOpacity>
+            </View>
+          ) : !todayWorkout ? (
+            <View style={styles.trainingEmptyCard}>
+              <Ionicons
+                name="calendar-outline"
+                size={28}
+                color="rgba(255,255,255,0.7)"
+                style={{ marginBottom: 8 }}
+              />
+              <Text style={styles.trainingEmptyTitle}>
+                No hay entrenamiento cargado para este día
+              </Text>
+              <Text style={styles.trainingEmptySubtitle}>
+                Probá seleccionar otro día o pedile a tu entrenador que complete el programa.
+              </Text>
             </View>
           ) : (
             <View style={styles.plannedCard}>
               <View style={styles.plannedHeader}>
                 <View>
                   <Text style={styles.plannedTitle}>Entrenamiento del Día</Text>
-                  {training.program?.title ? (
-                    <Text style={styles.trainingProgramName}>
-                      {training.program.title}
-                    </Text>
+                  {training?.program?.title ? (
+                    <Text style={styles.trainingProgramName}>{training.program.title}</Text>
                   ) : null}
                 </View>
-                <View style={[styles.statusBadge]}>
-                  <Text style={styles.statusText}>
-                    Día {todayWorkout.day_number}
-                  </Text>
+                <View style={styles.statusBadge}>
+                  <Text style={styles.statusText}>Día {todayWorkout.day_number}</Text>
                 </View>
               </View>
 
               <View style={styles.plannedContent}>
                 <Text style={styles.plannedName}>
-                  {todayWorkout.title
-                    ? todayWorkout.title
-                    : `Día ${todayWorkout.day_number}`}
+                  {todayWorkout.title ? todayWorkout.title : `Día ${todayWorkout.day_number}`}
                 </Text>
                 {todayWorkout.exercises?.length ? (
                   <Text style={styles.plannedDuration}>
                     {todayWorkout.exercises.length} ejercicios para hoy
                   </Text>
                 ) : (
-                  <Text style={styles.plannedDuration}>
-                    Aún no hay ejercicios cargados para hoy.
-                  </Text>
+                  <Text style={styles.plannedDuration}>Aún no hay ejercicios cargados para hoy.</Text>
                 )}
               </View>
 
@@ -249,18 +268,14 @@ const TuDiaTodayView = ({
           <View style={styles.mealsHeader}>
             <View>
               <Text style={styles.mealsTitle}>Plan de Comidas de Hoy</Text>
-              <Text style={styles.mealsSubtitle}>
-                Generado en tiempo real según tu perfil
-              </Text>
+              <Text style={styles.mealsSubtitle}>Generado según tu perfil + tu entrenamiento</Text>
             </View>
-            {dietToday?.totalCalories && (
-              <Text style={styles.mealsCalories}>
-                {dietToday.totalCalories} kcal
-              </Text>
-            )}
+            {dietToday?.totalCalories ? (
+              <Text style={styles.mealsCalories}>{dietToday.totalCalories} kcal</Text>
+            ) : null}
           </View>
 
-          {/* Botón principal de IA */}
+          {/* Botón IA */}
           <TouchableOpacity
             style={[
               styles.regenerateButton,
@@ -272,15 +287,11 @@ const TuDiaTodayView = ({
             {dietLoading ? (
               <>
                 <ActivityIndicator size="small" color="#fff" />
-                <Text style={styles.regenerateButtonText}>
-                  Generando tu plan...
-                </Text>
+                <Text style={styles.regenerateButtonText}>Generando tu plan...</Text>
               </>
             ) : (
               <Text style={styles.regenerateButtonText}>
-                {diet
-                  ? "Regenerar plan personalizado de hoy"
-                  : "Generar plan personalizado de hoy"}
+                {hasDietToday ? "Regenerar plan de hoy" : "Generar plan de hoy"}
               </Text>
             )}
           </TouchableOpacity>
@@ -289,40 +300,33 @@ const TuDiaTodayView = ({
             Tocá cualquier comida para ver los ingredientes y cantidades exactas.
           </Text>
 
-          {typeof regenLeft === "number" && regenMax && (
+          {typeof regenLeft === "number" && regenMax ? (
             <Text style={styles.regenInfoText}>
               {regenLeft > 0
                 ? `Te quedan ${regenLeft}/${regenMax} regeneraciones hoy`
                 : "Alcanzaste el máximo de regeneraciones para hoy."}
             </Text>
-          )}
+          ) : null}
 
-          {/* Mensajes de estado */}
           {dietError && !dietLoading && (
             <View style={{ paddingVertical: 12 }}>
-              <Text
-                style={{ color: "#ffb3b3", fontSize: 13, marginBottom: 8 }}
-              >
+              <Text style={{ color: "#ffb3b3", fontSize: 13, marginBottom: 8 }}>
                 {dietError}
               </Text>
-              <TouchableOpacity
-                style={styles.prepareButton}
-                onPress={onGenerateDiet}
-              >
+              <TouchableOpacity style={styles.prepareButton} onPress={onGenerateDiet}>
                 <Text style={styles.prepareButtonText}>Reintentar</Text>
               </TouchableOpacity>
             </View>
           )}
 
-          {!diet && !dietLoading && !dietError && (
+          {!hasDietToday && !dietLoading && !dietError && (
             <Text style={styles.mealsHint}>
-              Todavía no generaste tu plan de hoy. Tocá el botón de arriba y te
-              armamos un plan 100% personalizado con IA.
+              Todavía no generaste tu plan de hoy. Tocá el botón de arriba y te armamos uno personalizado.
             </Text>
           )}
 
-          {/* Meals reales de la IA */}
-          {!dietLoading && !dietError && dietToday?.meals && (
+          {/* Meals IA */}
+          {!dietLoading && !dietError && dietToday?.meals ? (
             <>
               {Object.entries(dietToday.meals).map(([mealType, meal]) => (
                 <TouchableOpacity
@@ -339,38 +343,28 @@ const TuDiaTodayView = ({
                       {mealType.charAt(0).toUpperCase() + mealType.slice(1)}
                     </Text>
                     <Text style={styles.mealName}>{meal.name}</Text>
-                    <Text style={styles.mealCalories}>
-                      {meal.calories} kcal
-                    </Text>
+                    <Text style={styles.mealCalories}>{meal.calories} kcal</Text>
                   </View>
                   <View style={styles.mealStatus}>
                     {meal.prepared ? (
                       <View style={styles.preparedBadge}>
-                        <Ionicons
-                          name="checkmark-circle"
-                          size={20}
-                          color="#4CAF50"
-                        />
+                        <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
                         <Text style={styles.preparedText}>Listo</Text>
                       </View>
                     ) : (
-                      <TouchableOpacity style={styles.prepareButton}>
+                      <View style={styles.prepareButton}>
                         <Text style={styles.prepareButtonText}>Preparar</Text>
-                      </TouchableOpacity>
+                      </View>
                     )}
                   </View>
                 </TouchableOpacity>
               ))}
             </>
-          )}
+          ) : null}
 
-          {todayPlan.isMealPrepDay && (
+          {todayPlan?.isMealPrepDay && (
             <TouchableOpacity style={styles.mealPrepReminder}>
-              <Ionicons
-                name="restaurant-outline"
-                size={20}
-                color="#FFB347"
-              />
+              <Ionicons name="restaurant-outline" size={20} color="#FFB347" />
               <Text style={styles.mealPrepText}>Hoy es día de Meal Prep</Text>
               <Ionicons name="chevron-forward" size={16} color="#FFB347" />
             </TouchableOpacity>
@@ -378,15 +372,10 @@ const TuDiaTodayView = ({
         </View>
       )}
 
-
       {/* Suplementos */}
       <View style={styles.supplementsTracker}>
         <View style={styles.supplementsHeader}>
-          <Ionicons
-            name="medical-outline"
-            size={20}
-            color="rgba(255,255,255,0.7)"
-          />
+          <Ionicons name="medical-outline" size={20} color="rgba(255,255,255,0.7)" />
           <Text style={styles.supplementsTitle}>Suplementos del Día</Text>
           <Text style={styles.supplementsCount}>
             {supplements.filter((s) => s.taken).length}/{supplements.length}
@@ -403,20 +392,11 @@ const TuDiaTodayView = ({
                 {supplement.taken ? (
                   <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
                 ) : (
-                  <Ionicons
-                    name="ellipse-outline"
-                    size={24}
-                    color="rgba(255,255,255,0.3)"
-                  />
+                  <Ionicons name="ellipse-outline" size={24} color="rgba(255,255,255,0.3)" />
                 )}
               </View>
               <View style={styles.supplementInfo}>
-                <Text
-                  style={[
-                    styles.supplementName,
-                    supplement.taken && styles.supplementTaken,
-                  ]}
-                >
+                <Text style={[styles.supplementName, supplement.taken && styles.supplementTaken]}>
                   {supplement.name}
                 </Text>
                 <View style={styles.supplementDetails}>
@@ -427,10 +407,7 @@ const TuDiaTodayView = ({
             </TouchableOpacity>
           ))}
         </View>
-        <TouchableOpacity
-          style={styles.addSupplementButton}
-          onPress={openSupplementsModal}
-        >
+        <TouchableOpacity style={styles.addSupplementButton} onPress={openSupplementsModal}>
           <Ionicons name="add-circle-outline" size={20} color="#4A90E2" />
           <Text style={styles.addSupplementText}>Agregar suplemento</Text>
         </TouchableOpacity>
@@ -458,6 +435,8 @@ const TuDiaTodayView = ({
 };
 
 const styles = StyleSheet.create({
+  // 👇 dejé tus estilos tal cual (no los repito para no alargar)
+  // (pegá acá exactamente tu StyleSheet actual sin cambios)
   dayTypeCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -478,19 +457,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginRight: 12,
   },
-  dayTypeInfo: {
-    flex: 1,
-  },
+  dayTypeInfo: { flex: 1 },
   dayTypeLabel: {
     fontSize: 16,
     fontWeight: "700",
     color: "rgba(255,255,255,0.96)",
     marginBottom: 2,
   },
-  dayTypeSubtext: {
-    fontSize: 13,
-    color: "rgba(255,255,255,0.6)",
-  },
+  dayTypeSubtext: { fontSize: 13, color: "rgba(255,255,255,0.6)" },
+
   shoppingAlert: {
     marginHorizontal: 20,
     marginBottom: 20,
@@ -503,19 +478,14 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 12,
   },
-  shoppingAlertContent: {
-    flex: 1,
-  },
+  shoppingAlertContent: { flex: 1 },
   shoppingAlertTitle: {
     fontSize: 15,
     fontWeight: "700",
     color: "white",
     marginBottom: 2,
   },
-  shoppingAlertSubtext: {
-    fontSize: 13,
-    color: "rgba(255,255,255,0.9)",
-  },
+  shoppingAlertSubtext: { fontSize: 13, color: "rgba(255,255,255,0.9)" },
 
   plannedCard: {
     marginHorizontal: 20,
@@ -544,27 +514,16 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 100,
   },
-  completedBadge: {
-    backgroundColor: "rgba(76,175,80,0.2)",
-  },
-  statusText: {
-    fontSize: 12,
-    color: "rgba(255,255,255,0.7)",
-    fontWeight: "600",
-  },
-  plannedContent: {
-    marginBottom: 16,
-  },
+  completedBadge: { backgroundColor: "rgba(76,175,80,0.2)" },
+  statusText: { fontSize: 12, color: "rgba(255,255,255,0.7)", fontWeight: "600" },
+  plannedContent: { marginBottom: 16 },
   plannedName: {
     fontSize: 22,
     fontWeight: "700",
     color: "rgba(255,255,255,0.96)",
     marginBottom: 4,
   },
-  plannedDuration: {
-    fontSize: 15,
-    color: "rgba(255,255,255,0.6)",
-  },
+  plannedDuration: { fontSize: 15, color: "rgba(255,255,255,0.6)" },
 
   trainingProgramName: {
     fontSize: 12,
@@ -605,44 +564,33 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: "#FFCF4A",
   },
-  aiButtonText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#111",
-  },
-  exerciseRow: {
-    marginBottom: 4,
-  },
-  exerciseName: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "rgba(255,255,255,0.95)",
-  },
-  exerciseMeta: {
-    fontSize: 12,
-    color: "rgba(255,255,255,0.6)",
-  },
+  aiButtonText: { fontSize: 13, fontWeight: "700", color: "#111" },
 
-  mealsContainer: {
-    marginHorizontal: 20,
-    marginBottom: 20,
-  },
+  mealsContainer: { marginHorizontal: 20, marginBottom: 20 },
   mealsHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 16,
   },
-  mealsTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "rgba(255,255,255,0.96)",
+  mealsTitle: { fontSize: 18, fontWeight: "700", color: "rgba(255,255,255,0.96)" },
+  mealsSubtitle: { fontSize: 13, color: "rgba(255,255,255,0.6)", marginTop: 4 },
+  mealsCalories: { fontSize: 15, fontWeight: "600", color: "rgba(255,255,255,0.6)" },
+
+  regenerateButton: {
+    paddingVertical: 12,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 10,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
   },
-  mealsCalories: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "rgba(255,255,255,0.6)",
-  },
+  regenerateButtonText: { color: "rgba(255,255,255,0.92)", fontWeight: "700" },
+  mealsHint: { fontSize: 12, color: "rgba(255,255,255,0.55)", marginBottom: 10 },
+  regenInfoText: { fontSize: 12, color: "rgba(255,255,255,0.55)", marginBottom: 10 },
+
   mealCard: {
     flexDirection: "row",
     alignItems: "center",
@@ -653,16 +601,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
   },
-  mealTime: {
-    marginRight: 16,
-  },
-  mealTimeText: {
-    fontSize: 13,
-    color: "rgba(255,255,255,0.5)",
-  },
-  mealInfo: {
-    flex: 1,
-  },
+  mealTime: { marginRight: 16 },
+  mealTimeText: { fontSize: 13, color: "rgba(255,255,255,0.5)" },
+  mealInfo: { flex: 1 },
   mealType: {
     fontSize: 12,
     color: "rgba(255,255,255,0.5)",
@@ -676,34 +617,18 @@ const styles = StyleSheet.create({
     color: "rgba(255,255,255,0.96)",
     marginBottom: 2,
   },
-  mealCalories: {
-    fontSize: 13,
-    color: "rgba(255,255,255,0.6)",
-  },
-  mealStatus: {
-    alignItems: "center",
-  },
-  preparedBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  preparedText: {
-    fontSize: 12,
-    color: "#4CAF50",
-    fontWeight: "600",
-  },
+  mealCalories: { fontSize: 13, color: "rgba(255,255,255,0.6)" },
+  mealStatus: { alignItems: "center" },
+  preparedBadge: { flexDirection: "row", alignItems: "center", gap: 4 },
+  preparedText: { fontSize: 12, color: "#4CAF50", fontWeight: "600" },
   prepareButton: {
     paddingHorizontal: 12,
     paddingVertical: 6,
     backgroundColor: "rgba(255,255,255,0.08)",
     borderRadius: 100,
   },
-  prepareButtonText: {
-    fontSize: 12,
-    color: "rgba(255,255,255,0.7)",
-    fontWeight: "600",
-  },
+  prepareButtonText: { fontSize: 12, color: "rgba(255,255,255,0.7)", fontWeight: "600" },
+
   mealPrepReminder: {
     flexDirection: "row",
     alignItems: "center",
@@ -713,12 +638,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
     gap: 8,
   },
-  mealPrepText: {
-    flex: 1,
-    fontSize: 14,
-    color: "#FFB347",
-    fontWeight: "600",
-  },
+  mealPrepText: { flex: 1, fontSize: 14, color: "#FFB347", fontWeight: "600" },
 
   supplementsTracker: {
     marginHorizontal: 20,
@@ -729,11 +649,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.08)",
   },
-  supplementsHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 16,
-  },
+  supplementsHeader: { flexDirection: "row", alignItems: "center", marginBottom: 16 },
   supplementsTitle: {
     fontSize: 14,
     fontWeight: "600",
@@ -741,49 +657,21 @@ const styles = StyleSheet.create({
     flex: 1,
     marginLeft: 8,
   },
-  supplementsCount: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#4CAF50",
-  },
-  supplementsList: {
-    gap: 12,
-  },
-  supplementItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 8,
-  },
-  supplementCheckbox: {
-    marginRight: 12,
-  },
-  supplementInfo: {
-    flex: 1,
-  },
+  supplementsCount: { fontSize: 14, fontWeight: "700", color: "#4CAF50" },
+  supplementsList: { gap: 12 },
+  supplementItem: { flexDirection: "row", alignItems: "center", paddingVertical: 8 },
+  supplementCheckbox: { marginRight: 12 },
+  supplementInfo: { flex: 1 },
   supplementName: {
     fontSize: 15,
     fontWeight: "600",
     color: "rgba(255,255,255,0.96)",
     marginBottom: 2,
   },
-  supplementTaken: {
-    textDecorationLine: "line-through",
-    color: "rgba(255,255,255,0.5)",
-  },
-  supplementDetails: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  supplementDose: {
-    fontSize: 12,
-    color: "rgba(255,255,255,0.5)",
-    fontWeight: "500",
-  },
-  supplementTime: {
-    fontSize: 12,
-    color: "rgba(255,255,255,0.4)",
-  },
+  supplementTaken: { textDecorationLine: "line-through", color: "rgba(255,255,255,0.5)" },
+  supplementDetails: { flexDirection: "row", alignItems: "center", gap: 8 },
+  supplementDose: { fontSize: 12, color: "rgba(255,255,255,0.5)", fontWeight: "500" },
+  supplementTime: { fontSize: 12, color: "rgba(255,255,255,0.4)" },
   addSupplementButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -796,11 +684,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(74,144,226,0.2)",
   },
-  addSupplementText: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#4A90E2",
-  },
+  addSupplementText: { fontSize: 14, fontWeight: "600", color: "#4A90E2" },
 
   statsContainer: {
     flexDirection: "row",
@@ -811,25 +695,11 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: "rgba(255,255,255,0.08)",
   },
-  statItem: {
-    alignItems: "center",
-    flex: 1,
-  },
-  statNumber: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "rgba(255,255,255,0.96)",
-    marginBottom: 4,
-  },
-  statLabel: {
-    fontSize: 12,
-    color: "rgba(255,255,255,0.4)",
-  },
-  statDivider: {
-    width: 1,
-    height: 40,
-    backgroundColor: "rgba(255,255,255,0.08)",
-  },
+  statItem: { alignItems: "center", flex: 1 },
+  statNumber: { fontSize: 24, fontWeight: "700", color: "rgba(255,255,255,0.96)", marginBottom: 4 },
+  statLabel: { fontSize: 12, color: "rgba(255,255,255,0.4)" },
+  statDivider: { width: 1, height: 40, backgroundColor: "rgba(255,255,255,0.08)" },
+
   startButton: {
     backgroundColor: "rgba(255,255,255,0.96)",
     paddingVertical: 12,
@@ -837,11 +707,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 16,
   },
-  startButtonText: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#0C0A0A",
-  },
+  startButtonText: { fontSize: 16, fontWeight: "700", color: "#0C0A0A" },
 });
 
 export default TuDiaTodayView;

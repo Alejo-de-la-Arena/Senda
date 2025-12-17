@@ -1,6 +1,5 @@
 
 require('dotenv').config({ path: require('path').resolve(__dirname, '.env') });
-console.log("[SENDA SERVER] Using Supabase URL:", process.env.SUPABASE_URL);
 const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
@@ -10,10 +9,16 @@ const { authOptional } = require('./middleware/auth');
 
 const app = express();
 app.use(cors({ origin: true, credentials: true }));
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({ limit: '2mb', strict: false }));
 app.use(cookieParser());
 app.use(morgan('dev'));
 app.use(authOptional);
+
+app.disable("etag");
+app.use((req, res, next) => {
+  res.set("Cache-Control", "no-store");
+  next();
+});
 
 // Rutas existentes
 app.use('/users', require('./routes/users'));

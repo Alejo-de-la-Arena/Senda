@@ -9,6 +9,7 @@ import {
   Modal,
   Text,
   TouchableOpacity,
+  Pressable,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import WeekStrip from "../../components/WeekStrip";
@@ -17,9 +18,23 @@ import { colors } from "../../styles/theme";
 import TuDiaTodayView from "./tuDiaTodayView";
 import TuDiaWeekView from "./tuDiaWeekView";
 import { getMe, getMyTraining } from "../../api/user";
-import { getDiet, refreshDiet } from "../../api/diet";
+import { getDietToday, getDietWeekSummary, refreshDiet } from "../../api/diet";
 import { useAuth } from "../../auth/AuthProvider";
 
+
+// --- Helper para saber el día actual ---
+const getDayKey = () => {
+  const days = [
+    "sunday",
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+  ];
+  return days[new Date().getDay()];
+};
 
 const TuDiaScreen = ({ navigation, route }) => {
   const { auth } = useAuth();
@@ -28,7 +43,9 @@ const TuDiaScreen = ({ navigation, route }) => {
   const [breathingStatus, setBreathingStatus] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
 
-  const [diet, setDiet] = useState(null);
+  // estados nuevos
+  const [dietTodayPayload, setDietTodayPayload] = useState(null); // {day_plan, ...}
+  const [weekSummaryPayload, setWeekSummaryPayload] = useState(null); // {week_summary, ...}
   const [dietLoading, setDietLoading] = useState(false);
   const [dietError, setDietError] = useState(null);
 
@@ -43,6 +60,9 @@ const TuDiaScreen = ({ navigation, route }) => {
   // Regeneraciones
   const [regenLeft, setRegenLeft] = useState(null);
   const [regenMax, setRegenMax] = useState(null);
+
+  // Día seleccionado en la UI (por defecto: hoy)
+  const [selectedDayKey, setSelectedDayKey] = useState(getDayKey());
 
   // Animaciones
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -73,6 +93,98 @@ const TuDiaScreen = ({ navigation, route }) => {
     },
     { id: 4, name: "Mejunge", taken: false, time: "Tarde", dose: "1" },
   ]);
+
+  const loadDietToday = async ({ allowRefresh } = { allowRefresh: false }) => {
+    if (!me) return;
+
+    setDietLoading(true);
+    setDietError(null);
+
+    const dayKey = selectedDayKey || getDayKey();
+
+    try {
+      if (allowRefresh) {
+        // regenera semana pero devuelve solo el día
+        const refreshed = await refreshDiet(me.id, { dayKey });
+        setDietTodayPayload(refreshed);
+
+        if (typeof refreshed.remaining_regens === "number") {
+          setRegenLeft(refreshed.remaining_regens);
+          setRegenMax(refreshed.max_regens || 3);
+        }
+
+        // invalidamos summary para que se recargue cuando vaya a week
+        setWeekSummaryPayload(null);
+        return;
+      }
+
+      const existing = await getDietToday(me.id, dayKey);
+      setDietTodayPayload(existing);
+
+      if (typeof existing.remaining_regens === "number") {
+        setRegenLeft(existing.remaining_regens);
+        setRegenMax(existing.max_regens || 3);
+      }
+    } catch (err) {
+      const status = err?.response?.status;
+
+      if (status === 404 && !allowRefresh) {
+        // no existe plan -> generamos y listo
+        try {
+          const refreshed = await refreshDiet(me.id, { dayKey });
+          setDietTodayPayload(refreshed);
+          console.log("REFRESHED PAYLOAD:", refreshed);
+
+          if (typeof refreshed.remaining_regens === "number") {
+            setRegenLeft(refreshed.remaining_regens);
+            setRegenMax(refreshed.max_regens || 3);
+          }
+
+          setWeekSummaryPayload(null);
+          return;
+        } catch (genErr) {
+          setDietError("No se pudo generar tu plan de comidas. Probá más tarde.");
+          return;
+        }
+      }
+
+      if (status === 429) {
+        const data = err?.response?.data;
+        setRegenLeft(data?.remaining_regens ?? 0);
+        setRegenMax(data?.max_regens ?? 3);
+        setDietError("Alcanzaste el máximo de regeneraciones para hoy.");
+        return;
+      }
+
+      setDietError("No se pudo cargar tu plan de comidas. Probá más tarde.");
+    } finally {
+      setDietLoading(false);
+    }
+  };
+
+  const loadWeekSummary = async () => {
+    if (!me) return;
+    try {
+      const data = await getDietWeekSummary(me.id);
+      setWeekSummaryPayload(data);
+    } catch (e) {
+      // no rompas la UI si falla
+      console.log("Error week summary", e?.response?.data || e);
+    }
+  };
+
+  // cargar HOY cuando me o selectedDayKey cambia
+  useEffect(() => {
+    if (me) loadDietToday({ allowRefresh: false });
+  }, [me, selectedDayKey]);
+
+  // cargar summary solo cuando se entra a week (lazy)
+  useEffect(() => {
+    if (me && viewMode === "week" && !weekSummaryPayload) {
+      loadWeekSummary();
+    }
+  }, [me, viewMode, weekSummaryPayload]);
+
 
   const toggleSupplement = (id) => {
     setSupplements((prev) =>
@@ -139,105 +251,8 @@ const TuDiaScreen = ({ navigation, route }) => {
     };
   }, []);
 
-  // Carga DietPlan (lectura o generación)
-  const loadDietPlan = async ({ allowRefresh } = { allowRefresh: false }) => {
-    if (!me) return;
-
-    setDietLoading(true);
-    setDietError(null);
-
-    try {
-      if (allowRefresh) {
-        //  Generar / regenerar plan (POST)
-        const refreshed = await refreshDiet(me.id); // POST /users/:id/diet/refresh
-
-        setDiet(refreshed);
-
-        if (typeof refreshed.remaining_regens === "number") {
-          setRegenLeft(refreshed.remaining_regens);
-          setRegenMax(refreshed.max_regens || 3);
-        }
-
-        return;
-      }
-
-      //  MODO SOLO LECTURA (al entrar a la screen)
-      const existing = await getDiet(me.id); // GET /users/:id/diet
-
-      if (existing && !existing.error) {
-        setDiet(existing);
-
-        if (typeof existing.remaining_regens === "number") {
-          setRegenLeft(existing.remaining_regens);
-          setRegenMax(existing.max_regens || 3);
-        }
-
-        return;
-      }
-
-      setDiet(null);
-    } catch (err) {
-      const status = err?.response?.status;
-      const data = err?.response?.data;
-
-      if (status === 404 && !allowRefresh) {
-        setDiet(null);
-        return;
-      }
-
-      if (status === 429) {
-        const remaining = data?.remaining_regens ?? 0;
-        const max = data?.max_regens ?? 3;
-
-        setRegenLeft(remaining);
-        setRegenMax(max);
-        setDietError("Alcanzaste el máximo de regeneraciones para hoy.");
-        console.log("Límite diario de regeneraciones:", data);
-        return;
-      }
-
-      console.log("Error leyendo / generando DietPlan:", data || err);
-      setDietError("No se pudo generar tu plan de comidas. Probá más tarde.");
-    } finally {
-      setDietLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (me) {
-      // Solo intenta leer si ya existe, NO regenera automáticamente
-      loadDietPlan({ allowRefresh: false });
-    }
-  }, [me]);
-
-  const dietToday = React.useMemo(() => {
-    if (!diet || !diet.plan) return null;
-    const plan = diet.plan;
-
-    const result = {
-      totalCalories: plan.total_kcal || null,
-      meals: {},
-    };
-
-    if (Array.isArray(plan.meals)) {
-      plan.meals.forEach((m) => {
-        const key = m.id || (m.label || "meal").toLowerCase();
-        result.meals[key] = {
-          name: m.title,
-          time: m.time || "",
-          calories: m.kcal || 0,
-          ingredients: m.ingredients || [],
-          prepared: false,
-        };
-      });
-    }
-
-    return result;
-  }, [diet]);
-
-
-  // Plan semanal mockeado (por ahora para comidas / breathe / stats)
-  const weekPlan = {
+  // Plan semanal MOCK base (breathe / stats / fallback si no hay dieta IA)
+  const mockWeekPlan = {
     monday: {
       dayType: "intense",
       dayTypeLabel: "Día Intenso",
@@ -414,21 +429,67 @@ const TuDiaScreen = ({ navigation, route }) => {
     },
   };
 
-  const getDayKey = () => {
-    const days = [
-      "sunday",
-      "monday",
-      "tuesday",
-      "wednesday",
-      "thursday",
-      "friday",
-      "saturday",
-    ];
-    return days[new Date().getDay()];
-  };
+  // Mezcla: mockWeekPlan + dieta real semanal (si existe)
+  const weekPlan = React.useMemo(() => {
+    const merged = { ...mockWeekPlan };
 
-  const todayKey = getDayKey();
+    const summary = weekSummaryPayload?.week_summary;
+    if (!summary) return merged;
+
+    Object.entries(summary).forEach(([dayKey, dayPlan]) => {
+      const baseDay = merged[dayKey] || {};
+
+      const mealsById = {};
+      if (Array.isArray(dayPlan.meals)) {
+        dayPlan.meals.forEach((m) => {
+          const key = m.id || "meal";
+          mealsById[key] = {
+            name: m.title,
+            time: m.time || "",
+            calories: m.kcal || 0,
+            ingredients: [], // summary no trae ingredientes
+            prepared: false,
+          };
+        });
+      }
+
+      merged[dayKey] = {
+        ...baseDay,
+        dayType: dayPlan.dayType || baseDay.dayType || "normal",
+        meals: mealsById,
+        totalCalories: dayPlan.total_kcal || baseDay.totalCalories || null,
+      };
+    });
+
+    return merged;
+  }, [weekSummaryPayload]);
+
+
+  const todayKey = selectedDayKey || getDayKey();
   const todayPlan = weekPlan[todayKey] || weekPlan.monday;
+
+  const dietToday = React.useMemo(() => {
+    const dayPlan = dietTodayPayload?.day_plan;
+    if (!dayPlan) return null;
+
+    const result = { totalCalories: dayPlan.total_kcal || null, meals: {} };
+
+    if (Array.isArray(dayPlan.meals)) {
+      dayPlan.meals.forEach((m) => {
+        const key = m.id || (m.label || "meal").toLowerCase();
+        result.meals[key] = {
+          name: m.title,
+          time: m.time || "",
+          calories: m.kcal || 0,
+          ingredients: m.ingredients || [],
+          prepared: false,
+        };
+      });
+    }
+
+    return result;
+  }, [dietTodayPayload]);
+
 
   // Manejo de status de respiración que viene por route params
   useEffect(() => {
@@ -479,7 +540,10 @@ const TuDiaScreen = ({ navigation, route }) => {
             ]}
           >
             {/* Week Strip */}
-            <WeekStrip />
+            <WeekStrip
+              selectedDayKey={todayKey}
+              onDayPress={(dayKey) => setSelectedDayKey(dayKey)}
+            />
 
             {viewMode === "today" ? (
               <TuDiaTodayView
@@ -495,13 +559,16 @@ const TuDiaScreen = ({ navigation, route }) => {
                 training={training}
                 trainingLoading={trainingLoading}
                 trainingError={trainingError}
-                diet={diet}
+
+                selectedDayKey={todayKey}
+                dietTodayPayload={dietTodayPayload}
                 dietToday={dietToday}
                 dietLoading={dietLoading}
                 dietError={dietError}
                 regenLeft={regenLeft}
                 regenMax={regenMax}
-                onGenerateDiet={() => loadDietPlan({ allowRefresh: true })}
+                onGenerateDiet={() => loadDietToday({ allowRefresh: true })}
+
                 onPressMeal={(mealWithType) => {
                   setSelectedMeal(mealWithType);
                   setMealModalVisible(true);
@@ -511,7 +578,20 @@ const TuDiaScreen = ({ navigation, route }) => {
               <TuDiaWeekView
                 weekPlan={weekPlan}
                 todayKey={todayKey}
+                selectedDayKey={todayKey}                 // hoyKey == selectedDayKey actual
+                onSelectDay={(dk) => setSelectedDayKey(dk)} // por si querés click en cards
                 onBackToToday={() => setViewMode("today")}
+
+                // para mostrar el día seleccionado con data real
+                dietToday={dietToday}
+                dietLoading={dietLoading}
+                dietError={dietError}
+
+                // para reusar el modal de ingredientes
+                onPressMeal={(mealWithType) => {
+                  setSelectedMeal(mealWithType);
+                  setMealModalVisible(true);
+                }}
               />
             )}
           </Animated.View>
@@ -528,19 +608,35 @@ const TuDiaScreen = ({ navigation, route }) => {
           setModalVisible(false);
         }}
       />
-      
+
       {/* Modal de ingredientes de la comida */}
       <Modal
         visible={mealModalVisible && !!selectedMeal}
         transparent
-        animationType="slide"
+        animationType="fade"
         onRequestClose={() => setMealModalVisible(false)}
       >
         <View style={styles.mealModalBackdrop}>
+          {/* Tap afuera para cerrar */}
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setMealModalVisible(false)}
+          />
+
           <View style={styles.mealModalContent}>
-            <Text style={styles.mealModalTitle}>
-              {selectedMeal?.name || "Comida"}
-            </Text>
+            <View style={styles.mealModalHeader}>
+              <Text style={styles.mealModalTitle}>
+                {selectedMeal?.name || "Comida"}
+              </Text>
+
+              <TouchableOpacity
+                onPress={() => setMealModalVisible(false)}
+                style={styles.mealModalX}
+              >
+                <Text style={styles.mealModalXText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+
             <Text style={styles.mealModalSubtitle}>
               {selectedMeal?.time
                 ? `${selectedMeal.time} · ${selectedMeal.calories} kcal`
@@ -549,28 +645,22 @@ const TuDiaScreen = ({ navigation, route }) => {
 
             <View style={styles.mealModalDivider} />
 
-            {Array.isArray(selectedMeal?.ingredients) &&
-              selectedMeal.ingredients.length > 0 ? (
-              <View style={styles.mealModalIngredientsList}>
-                {selectedMeal.ingredients.map((ing, idx) => (
-                  <View
-                    key={idx}
-                    style={styles.mealModalIngredientRow}
-                  >
-                    <Text style={styles.mealModalIngredientName}>
-                      {ing.name}
-                    </Text>
+            <ScrollView style={styles.mealModalScroll} showsVerticalScrollIndicator={false}>
+              {Array.isArray(selectedMeal?.ingredients) && selectedMeal.ingredients.length > 0 ? (
+                selectedMeal.ingredients.map((ing, idx) => (
+                  <View key={idx} style={styles.mealModalIngredientRow}>
+                    <Text style={styles.mealModalIngredientName}>{ing.name}</Text>
                     <Text style={styles.mealModalIngredientAmount}>
                       {ing.amount} {ing.unit}
                     </Text>
                   </View>
-                ))}
-              </View>
-            ) : (
-              <Text style={styles.mealModalNoIngredients}>
-                Aún no tenemos el detalle de ingredientes para esta comida.
-              </Text>
-            )}
+                ))
+              ) : (
+                <Text style={styles.mealModalNoIngredients}>
+                  Aún no tenemos el detalle de ingredientes para esta comida.
+                </Text>
+              )}
+            </ScrollView>
 
             <TouchableOpacity
               style={styles.mealModalCloseButton}
@@ -581,6 +671,7 @@ const TuDiaScreen = ({ navigation, route }) => {
           </View>
         </View>
       </Modal>
+
 
     </LinearGradient>
   );
@@ -600,6 +691,88 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingBottom: 100,
   },
+  mealModalBackdrop: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.55)",
+    padding: 16,
+  },
+  mealModalContent: {
+    width: "100%",
+    maxWidth: 420,
+    borderRadius: 18,
+    padding: 16,
+    backgroundColor: "rgba(20,20,20,0.95)",
+  },
+  mealModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  mealModalTitle: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: "700",
+    color: "white",
+  },
+  mealModalX: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.10)",
+  },
+  mealModalXText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  mealModalSubtitle: {
+    marginTop: 6,
+    color: "rgba(255,255,255,0.75)",
+  },
+  mealModalDivider: {
+    height: 1,
+    backgroundColor: "rgba(255,255,255,0.10)",
+    marginVertical: 12,
+  },
+  mealModalScroll: {
+    maxHeight: 260,
+  },
+  mealModalIngredientRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255,255,255,0.08)",
+  },
+  mealModalIngredientName: {
+    color: "white",
+    width: "65%",
+  },
+  mealModalIngredientAmount: {
+    color: "rgba(255,255,255,0.85)",
+    fontWeight: "600",
+  },
+  mealModalNoIngredients: {
+    color: "rgba(255,255,255,0.75)",
+    paddingVertical: 10,
+  },
+  mealModalCloseButton: {
+    marginTop: 14,
+    height: 44,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.10)",
+  },
+  mealModalCloseText: {
+    color: "white",
+    fontWeight: "700",
+  }
 });
 
 export default TuDiaScreen;
